@@ -1,12 +1,18 @@
-import os
+from typing import Any
 import json
+import argparse
+import os
 import asyncio
 import logging
-import argparse
-from typing import Any, List, Dict, Union
 from email.header import decode_header
 from base64 import urlsafe_b64decode
 from email import message_from_bytes
+from typing import List, Dict, Union
+
+from mcp.server.models import InitializationOptions
+import mcp.types as types
+from mcp.server import NotificationOptions, Server
+import mcp.server.stdio
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -159,41 +165,82 @@ class GmailService:
             logger.error(error_msg)
             return error_msg
 
-
 async def main(creds_file_path: str, token_path: str):
-    """Main function to get unread emails"""
-    try:
-        gmail_service = GmailService(creds_file_path, token_path)
+    """Initialize and run the Gmail MCP server"""
 
-        unread_emails = await gmail_service.get_unread_emails()
+    gmail_service = GmailService(creds_file_path, token_path)
+    server = Server("gmail")
 
-        if isinstance(unread_emails, list):
-            print(f"Found {len(unread_emails)} unread emails:")
-            for i, email in enumerate(unread_emails):
-                # Prepare body preview (limit to 100 characters)
-                body_preview = email.get('body', '')
-                if len(body_preview) > 100:
-                    body_preview = body_preview[:100].replace('\n', ' ') + '...'
+    @server.list_prompts()
+    async def list_prompts() -> list[types.Prompt]:
+        return []  # No prompts, only focusing on the email reading tool
 
-                # Create output object
-                email_output = {
-                    "id": email.get('id', ''),
-                    "subject": email.get('subject', ''),
-                    "sender": email.get('sender', ''),
-                    "body": body_preview
-                }
+    @server.list_tools()
+    async def handle_list_tools() -> list[types.Tool]:
+        return [
+            types.Tool(
+                name="get-unread-emails",
+                description="Retrieve unread emails with detailed content",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                },
+            ),
+        ]
 
-                # Print as JSON
-                print(json.dumps(email_output))
+    @server.call_tool()
+    async def handle_call_tool(
+        name: str, arguments: dict | None
+    ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+        if name == "get-unread-emails":
+            unread_emails = await gmail_service.get_unread_emails()
+
+            # Format as JSON strings with specific fields for each email
+            if isinstance(unread_emails, list):
+                formatted_emails = []
+                for email in unread_emails:
+                    body = email.get('body', '')
+                    body_preview = body[:200].replace('\n', ' ') + '...' if len(body) > 200 else body
+
+                    formatted_email = {
+                        "id": email.get('id', ''),
+                        "subject": email.get('subject', ''),
+                        "sender": email.get('sender', ''),
+                        "body": body_preview
+                    }
+                    formatted_emails.append(formatted_email)
+
+                return [types.TextContent(
+                    type="text",
+                    text=json.dumps(formatted_emails, indent=2),
+                )]
+            else:
+                return [types.TextContent(
+                    type="text",
+                    text=str(unread_emails)
+                )]
         else:
-            print(f"Error: {unread_emails}")
+            logger.error(f"Unknown tool: {name}")
+            raise ValueError(f"Unknown tool: {name}")
 
-    except Exception as e:
-        logger.error(f"An error occurred: {str(e)}")
-        print(f"Error: {str(e)}")
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="gmail",
+                server_version="0.1.0",
+                capabilities=server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
+            ),
+        )
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Gmail Unread Emails Fetcher')
+    parser = argparse.ArgumentParser(description='Gmail Email Reader MCP Server')
     parser.add_argument(
         '--creds-file-path',
         required=True,
@@ -202,7 +249,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--token-path',
         required=True,
-        help='File location to store and retrieve access and refresh tokens'
+        help='File location to store and retrieve access and refresh tokens for application'
     )
 
     args = parser.parse_args()
