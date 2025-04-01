@@ -162,7 +162,7 @@ class GmailService:
 
     async def get_email_details(self, email_id: str) -> Dict[str, str] | str:
         """
-        Retrieves email contents including subject, sender, and body content.
+        Retrieves email contents including subject, sender, body content, and attachments.
         """
         try:
             msg = self.service.users().messages().get(userId="me", id=email_id, format='raw').execute()
@@ -183,9 +183,9 @@ class GmailService:
                     if part.get_content_type() == "text/plain":
                         body = part.get_payload(decode=True)
 
-                        if body and isinstance(body, bytes):
-                            body = body.decode(errors='replace')
-                        break
+                    if body and isinstance(body, bytes):
+                        body = body.decode(errors='replace')
+                    break
             else:
                 # For non-multipart messages
                 body = mime_message.get_payload(decode=True)
@@ -197,6 +197,20 @@ class GmailService:
             # Extract metadata
             email_metadata['subject'] = decode_mime_header(mime_message.get('subject', 'No Subject'))
             email_metadata['sender'] = mime_message.get('from', 'Unknown Sender')
+
+            # Extract attachments
+            attachments = []
+            for part in mime_message.walk():
+                if part.get_content_maintype() == 'multipart' or part.get('Content-Disposition') is None:
+                    continue
+                filename = part.get_filename()
+                if filename:
+                   attachment = {
+                       'filename': filename,
+                       'content': part.get_payload(decode=True).decode(errors='ignore') if part.get_payload(decode=True) else ''
+                   }
+                   attachments.append(attachment)
+            email_metadata['attachments'] = attachments
 
             logger.info(f"Retrieved details for email: {email_id}")
 
@@ -215,7 +229,7 @@ class GmailService:
 
         Args:
             query (str): Gmail search query (e.g., 'from:example@gmail.com', 'subject:hello',
-                        'after:2023/04/14 before:2023/04/16 (subject:"Amazon" OR "Amazon") £42.99')
+                        'after:2023/04/14 before:2023/04/16 (subject:"Amazon" OR "Amazon") £42.99'
         """
         try:
             user_id = 'me'
@@ -274,7 +288,7 @@ async def main(creds_file_path: str, token_path: str):
             ),
             types.Tool(
                 name="search-emails",
-                description="Search emails using Gmail's search syntax",
+                description="Search emails using Gmail's search syntax and include attachments",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -335,12 +349,15 @@ async def main(creds_file_path: str, token_path: str):
                 formatted_emails = []
                 for email in search_results:
                     body = email.get('body', '')
+                    attachments = email.get('attachments', [])
+                    attachment_filenames = [attachment['filename'] for attachment in attachments]
 
                     formatted_email = {
                         "id": email.get('id', ''),
                         "subject": email.get('subject', ''),
                         "sender": email.get('sender', ''),
-                        "body": body  # trim?
+                        "body": body, # trim?
+                        "attachments": attachment_filenames
                     }
                     formatted_emails.append(formatted_email)
 
