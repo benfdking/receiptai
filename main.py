@@ -48,22 +48,63 @@ class GmailService:
         self.service = self._get_service()
 
     def _get_token(self) -> Union[Credentials, Any]:
-        """Get or refresh Google API token"""
+        """Get or refresh Google API token with robust handling"""
         token = None
+        need_new_token = False
 
         if os.path.exists(self.token_path):
             logger.info('Loading token from file')
-            token = Credentials.from_authorized_user_file(self.token_path, self.scopes)
+            try:
+                # Load token data
+                with open(self.token_path, 'r') as f:
+                    token_data = json.load(f)
 
-        if not token or not token.valid:
-            if token and token.expired and token.refresh_token:
-                logger.info('Refreshing token')
+                if 'refresh_token' not in token_data:
+                    logger.warning("Token file exists but missing refresh_token field")
+                    need_new_token = True
+                else:
+                    token = Credentials.from_authorized_user_info(token_data, self.scopes)
+
+                    if token.expired and not token.refresh_token:
+                        logger.warning("Token is expired and can't be refreshed")
+                        need_new_token = True
+            except Exception as e:
+                logger.error(f"Error loading token: {e}")
+                need_new_token = True
+        else:
+            logger.info("No token file found")
+            need_new_token = True
+
+        if token and token.expired and token.refresh_token:
+            logger.info('Token expired, refreshing with refresh token')
+            try:
                 token.refresh(Request())
-            else:
-                logger.info('Fetching new token')
-                flow = InstalledAppFlow.from_client_secrets_file(self.creds_file_path, self.scopes)
-                token = flow.run_local_server(port=8080)
+                logger.info('Token refreshed successfully')
+            except Exception as e:
+                logger.error(f"Error refreshing token: {e}")
+                need_new_token = True
 
+        if need_new_token:
+            logger.info('Getting new token with refresh capabilities')
+
+            # Create the OAuth flow
+            flow = InstalledAppFlow.from_client_secrets_file(
+                self.creds_file_path,
+                self.scopes
+            )
+
+            # Run the authorization flow
+            token = flow.run_local_server(
+                port=8080,  # Use any available port
+                access_type='offline',
+                prompt='consent'
+            )
+
+            if not token.refresh_token:
+                logger.error("Failed to obtain refresh token even with correct parameters")
+                raise ValueError("Could not obtain a refresh token. Check your OAuth client configuration.")
+
+        if token:
             with open(self.token_path, 'w') as token_file:
                 token_file.write(token.to_json())
                 logger.info(f'Token saved to {self.token_path}')
