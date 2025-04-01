@@ -205,6 +205,64 @@ class GmailService:
             error_msg = f"An HttpError occurred while getting email details: {str(error)}"
             logger.error(error_msg)
             return error_msg
+        
+    async def get_email_attachments(self, email_id: str) -> Union[List[Dict[str, Any]], str]:
+        """
+        Retrieve all attachments from a specific email by its ID.
+        Returns a list of dictionaries, each containing:
+            - filename
+            - mimeType
+            - data (raw byte content or base64-encoded string)
+        If no attachments found or an error occurs, returns an empty list or error string.
+        """
+        try:
+            message = self.service.users().messages().get(
+                userId='me', id=email_id, format='full'
+            ).execute()
+
+            payload = message.get('payload', {})
+            attachments = []
+            self._extract_attachments(payload, email_id, attachments)
+            return attachments
+
+        except HttpError as error:
+            error_msg = f"An error occurred when fetching email attachments: {error}"
+            logger.error(error_msg)
+            return error_msg
+
+    def _extract_attachments(self, payload: Dict[str, Any], email_id: str, attachments_list: List[Dict[str, Any]]):
+        """
+        Recursively traverse parts of the email payload to find attachments.
+        If found, download and decode them, then append to attachments_list.
+        """
+        parts = payload.get('parts', [])
+        for part in parts:
+            filename = part.get('filename')
+            body = part.get('body', {})
+            mime_type = part.get('mimeType')
+            attachment_id = body.get('attachmentId')
+
+            # If the part has a filename and an attachmentId, it's likely an attachment
+            if filename and attachment_id:
+                attachment_data = self.service.users().messages().attachments().get(
+                    userId='me',
+                    messageId=email_id,
+                    id=attachment_id
+                ).execute()
+
+                # The attachment data is encoded in base64 (URL-safe)
+                data = attachment_data.get('data', '')
+                file_data = urlsafe_b64decode(data)
+
+                attachments_list.append({
+                    'filename': filename,
+                    'mimeType': mime_type,
+                    'data': file_data
+                })
+
+            # If there are nested parts, recurse
+            if 'parts' in part:
+                self._extract_attachments(part, email_id, attachments_list)
 
 async def main(creds_file_path: str, token_path: str):
     """Initialize and run the Gmail MCP server"""
@@ -226,6 +284,15 @@ async def main(creds_file_path: str, token_path: str):
                     "type": "object",
                     "properties": {},
                     "required": []
+                },
+            ),
+            types.Tool(
+                name="get-email-attachments",
+                description="Retrieve attachments from a specific email by its ID",
+                inputSchema={
+                    "type": "object",
+                    "properties": {"email_id": {"type": "string"}},
+                    "required": ["email_id"]
                 },
             ),
         ]
@@ -261,6 +328,12 @@ async def main(creds_file_path: str, token_path: str):
                     type="text",
                     text=str(unread_emails)
                 )]
+        elif name == "get-email-attachments":
+            email_id = arguments.get('email_id')
+            attachments = await gmail_service.get_email_attachments(email_id)
+            return [types.TextContent(
+                type="text",
+                text=json.dumps(attachments, indent=2)
         else:
             logger.error(f"Unknown tool: {name}")
             raise ValueError(f"Unknown tool: {name}")
