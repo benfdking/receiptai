@@ -1,0 +1,2 @@
+- [ ] Py mcp client
+- [ ] Force token.json reslate on offline error access
