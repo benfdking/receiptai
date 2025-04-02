@@ -7,3 +7,6 @@ uv run run main.py --creds-file-path=creds/credentials.json --token-path=creds/t
 ## Resources
 
 https://github.com/gumloop/guMCP/tree/main/src/servers/gmail
+
+Getting the credentials: https://github.com/gumloop/GuMCP/blob/main/src/servers/gmail/README.md
+
