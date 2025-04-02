@@ -1,6 +1,5 @@
 from typing import Any
 import json
-import argparse
 import os
 import asyncio
 import logging
@@ -8,6 +7,7 @@ from email.header import decode_header
 from base64 import urlsafe_b64decode
 from email import message_from_bytes
 from typing import List, Dict, Union
+from dotenv import load_dotenv
 
 from mcp.server.models import InitializationOptions
 import mcp.types as types
@@ -264,8 +264,26 @@ class GmailService:
             logger.error(error_msg)
             return error_msg
 
-async def main(creds_file_path: str, token_path: str):
-    """Initialize and run the Gmail MCP server"""
+async def main():
+    """Initialize and run the Gmail MCP server using environment variables"""
+    # Load environment variables from .env file
+    load_dotenv()
+
+    #TODO(jimmy): move to config obj
+    creds_file_path = os.environ.get('CREDS_FILE_PATH')
+    token_path = os.environ.get('TOKEN_JSON_PATH')
+
+    # Validate environment variables
+    if not creds_file_path:
+        logger.error("CREDS_FILE_PATH environment variable is not set")
+        raise ValueError("CREDS_FILE_PATH environment variable is required")
+
+    if not token_path:
+        logger.error("TOKEN_JSON_PATH environment variable is not set")
+        raise ValueError("TOKEN_JSON_PATH environment variable is required")
+
+    logger.info(f"Using credentials file: {creds_file_path}")
+    logger.info(f"Using token path: {token_path}")
 
     gmail_service = GmailService(creds_file_path, token_path)
     server = Server("gmail")
@@ -391,17 +409,4 @@ async def main(creds_file_path: str, token_path: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Gmail Email Reader MCP Server')
-    parser.add_argument(
-        '--creds-file-path',
-        required=True,
-        help='OAuth 2.0 credentials file path'
-    )
-    parser.add_argument(
-        '--token-path',
-        required=True,
-        help='File location to store and retrieve access and refresh tokens for application'
-    )
-
-    args = parser.parse_args()
-    asyncio.run(main(args.creds_file_path, args.token_path))
+    asyncio.run(main())
