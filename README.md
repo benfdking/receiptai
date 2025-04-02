@@ -16,6 +16,12 @@ uv add "mcp[cli]"
 
 
 ## Run locally
+### Env.example
+```txt
 ANTHROPIC_API_KEY=example_str
 CREDS_FILE_PATH=example_str
 TOKEN_JSON_PATH=example._str
+```
+
+### Cmd
+`make dev`
