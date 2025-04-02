@@ -1,2 +1,5 @@
 - [ ] Py mcp client
 - [ ] Force token.json reslate on offline error access
+- [ ] Add instructions on how to run it
+- [ ] Add the attachment fetcher
+- [x] Add ability to do search
