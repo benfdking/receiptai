@@ -10,3 +10,4 @@ https://github.com/gumloop/guMCP/tree/main/src/servers/gmail
 
 Getting the credentials: https://github.com/gumloop/GuMCP/blob/main/src/servers/gmail/README.md
 
+Using the inspector: https://github.com/modelcontextprotocol/inspector
