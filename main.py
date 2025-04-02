@@ -162,7 +162,7 @@ class GmailService:
 
     async def get_email_details(self, email_id: str) -> Dict[str, str] | str:
         """
-        Retrieves email contents including subject, sender, and body content.
+        Retrieves email contents including subject, sender, body content, and attachments.
         """
         try:
             msg = self.service.users().messages().get(userId="me", id=email_id, format='raw').execute()
@@ -183,9 +183,9 @@ class GmailService:
                     if part.get_content_type() == "text/plain":
                         body = part.get_payload(decode=True)
 
-                        if body and isinstance(body, bytes):
-                            body = body.decode(errors='replace')
-                        break
+                    if body and isinstance(body, bytes):
+                        body = body.decode(errors='replace')
+                    break
             else:
                 # For non-multipart messages
                 body = mime_message.get_payload(decode=True)
@@ -198,11 +198,69 @@ class GmailService:
             email_metadata['subject'] = decode_mime_header(mime_message.get('subject', 'No Subject'))
             email_metadata['sender'] = mime_message.get('from', 'Unknown Sender')
 
+            # Extract attachments
+            attachments = []
+            for part in mime_message.walk():
+                if part.get_content_maintype() == 'multipart' or part.get('Content-Disposition') is None:
+                    continue
+                filename = part.get_filename()
+                if filename:
+                   attachment = {
+                       'filename': filename,
+                       'content': part.get_payload(decode=True).decode(errors='ignore') if part.get_payload(decode=True) else ''
+                   }
+                   attachments.append(attachment)
+            email_metadata['attachments'] = attachments
+
             logger.info(f"Retrieved details for email: {email_id}")
 
             return email_metadata
         except HttpError as error:
             error_msg = f"An HttpError occurred while getting email details: {str(error)}"
+            logger.error(error_msg)
+            return error_msg
+
+    async def search_emails(self, query: str) -> Union[List[Dict[str, str]], str]:
+        """
+        Searches emails using Gmail's search syntax.
+        ref -> https://developers.google.com/workspace/gmail/api/guides/filtering
+
+        Returns list of email objects with id, subject, sender, and body.
+
+        Args:
+            query (str): Gmail search query (e.g., 'from:example@gmail.com', 'subject:hello',
+                        'after:2023/04/14 before:2023/04/16 (subject:"Amazon" OR "Amazon") £42.99'
+        """
+        try:
+            user_id = 'me'
+
+            response = self.service.users().messages().list(
+                userId=user_id, q=query).execute()
+
+            messages = []
+            if 'messages' in response:
+                messages.extend(response['messages'])
+
+            # Handle pagination for large numbers of search results
+            while 'nextPageToken' in response:
+                page_token = response['nextPageToken']
+                response = self.service.users().messages().list(
+                    userId=user_id, q=query, pageToken=page_token).execute()
+                if 'messages' in response:
+                    messages.extend(response['messages'])
+
+            logger.info(f"Found {len(messages)} emails matching query: {query}")
+
+            detailed_messages = []
+            for msg in messages:
+                email_details = await self.get_email_details(msg['id'])
+                if isinstance(email_details, dict):
+                    detailed_messages.append(email_details)
+
+            return detailed_messages
+
+        except HttpError as error:
+            error_msg = f"An HttpError occurred: {str(error)}"
             logger.error(error_msg)
             return error_msg
 
@@ -228,6 +286,21 @@ async def main(creds_file_path: str, token_path: str):
                     "required": []
                 },
             ),
+            types.Tool(
+                name="search-emails",
+                description="Search emails using Gmail's search syntax and include attachments",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Gmail search query (e.g., 'from:example@gmail.com', 'subject:hello')"
+                        }
+                    },
+                    "required": ["query"]
+                },
+            ),
+
         ]
 
     @server.call_tool()
@@ -261,9 +334,46 @@ async def main(creds_file_path: str, token_path: str):
                     type="text",
                     text=str(unread_emails)
                 )]
+        elif name == "search-emails":
+            if not arguments or "query" not in arguments:
+                return [types.TextContent(
+                    type="text",
+                    text="Query parameter is required for search-emails tool."
+                )]
+
+            query = arguments["query"]
+            search_results = await gmail_service.search_emails(query)
+
+            # Format as JSON strings with specific fields for each email
+            if isinstance(search_results, list):
+                formatted_emails = []
+                for email in search_results:
+                    body = email.get('body', '')
+                    attachments = email.get('attachments', [])
+                    attachment_filenames = [attachment['filename'] for attachment in attachments]
+
+                    formatted_email = {
+                        "id": email.get('id', ''),
+                        "subject": email.get('subject', ''),
+                        "sender": email.get('sender', ''),
+                        "body": body, # trim?
+                        "attachments": attachment_filenames
+                    }
+                    formatted_emails.append(formatted_email)
+
+                return [types.TextContent(
+                    type="text",
+                    text=json.dumps(formatted_emails, indent=2),
+                )]
+            else:
+                return [types.TextContent(
+                    type="text",
+                    text=str(search_results)
+                )]
         else:
             logger.error(f"Unknown tool: {name}")
             raise ValueError(f"Unknown tool: {name}")
+
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
