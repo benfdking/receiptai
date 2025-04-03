@@ -12,6 +12,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2.1",
     "anthropic>=0.49.0",
     "python-dotenv>=1.1.0",
+    "openapi-python-client>=0.24.3",
 ]
 
 [tool.pyright]
