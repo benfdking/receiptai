@@ -2,7 +2,7 @@
 
 npm run [timestamp] [name] [amount] [currency] [folder_to_dump]
 
-uv run run main.py --creds-file-path=creds/credentials.json --token-path=creds/token.json
+uv run main.py
 
 ## Resources
 
@@ -13,3 +13,15 @@ Getting the credentials: https://github.com/gumloop/GuMCP/blob/main/src/servers/
 Using the inspector: https://github.com/modelcontextprotocol/inspector
 
 uv add "mcp[cli]"
+
+
+## Run locally
+### Env.example
+```txt
+ANTHROPIC_API_KEY=example_str
+CREDS_FILE_PATH=example_str
+TOKEN_JSON_PATH=example._str
+```
+
+### Cmd
+`make dev`

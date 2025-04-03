@@ -1,6 +1,7 @@
 # Goal: Get it working e2e for one user locally
 
-- [ ] Py mcp client (Jimmy) -> interface calling the mcp service -> getting an agent up and running 
+- [x] Py mcp client (Jimmy) -> interface calling the mcp service -> getting an agent up and running
+- [ ] Prefer multi model usage over anthropic sdk
 - [ ] Add the attachment fetcher (Ben) (not tested)
 - [ ] Add abilty to use a web browser (Ben) (next)
 - [ ] Check can run locally myself with intructions
