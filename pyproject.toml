@@ -17,3 +17,19 @@ dependencies = [
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.3.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "auto"
