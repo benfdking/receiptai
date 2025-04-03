@@ -1,5 +1,5 @@
 dev:
-	@python client.py main.py
+	@python receiptai/client.py receiptai/main.py
 
 lint:
 	ruff check .
