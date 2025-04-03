@@ -13,6 +13,8 @@ dependencies = [
     "anthropic>=0.49.0",
     "python-dotenv>=1.1.0",
     "openapi-python-client>=0.24.3",
+    "python-dateutil>=2.9.0.post0",
+    "attrs>=25.3.0",
 ]
 
 [tool.pyright]
