@@ -1,6 +1,7 @@
-from typing import Optional, cast
+from typing import Optional
 from contextlib import AsyncExitStack, asynccontextmanager
 import logging
+import json
 
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException
@@ -13,7 +14,6 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 import os
 
-# Configure logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -26,14 +26,18 @@ load_dotenv()
 class Query(BaseModel):
     text: str
 
+class EmailDetails(BaseModel):
+    sender:str
+    recipient:str
+    subject:str
+    date:str
+    body:str
+
 class QueryResponse(BaseModel):
-    response: str
+    count: str
+    results: list[EmailDetails]
 
-# Global variables
-mcp_client = None
-server_script_path = None
 
-# Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global mcp_client, server_script_path
@@ -61,7 +65,6 @@ async def lifespan(app: FastAPI):
         logger.info("MCP client cleaned up")
 
 
-app = FastAPI(title="MCP Client API", lifespan=lifespan)
 
 class MCPClient:
     def __init__(self):
@@ -88,7 +91,7 @@ class MCPClient:
 
         # self.session is guaranteed to be non-None at this point
         assert self.session is not None, "Session should be initialised"
-        await self.session.initialise()
+        await self.session.initialize()
 
         # List available tools
         response = await self.session.list_tools()
@@ -106,7 +109,34 @@ class MCPClient:
         messages = [
             {
                 "role": "user",
-                "content": query
+                "content": f"""Answer email search and retrieval requests using appropriate email tools.
+                Before accessing emails, do some analysis within <thinking></thinking> tags.
+                <thinking>
+                1. Determine required function (search, list, get, filter)
+                2. Assess provided parameters (sender, recipient, date range, subject keywords, folder)
+                3. For empty search results, simply state nothing found
+                4. Only decline non-email related queries
+                5. Infer missing parameters from context when reasonable
+                6. If critical parameters cannot be inferred, ask for specific missing information
+                </thinking>
+
+                ONLY return email information in this JSON format:
+                {{
+                  "count": "Number of emails found",
+                  "results": [
+                    {{
+                      "sender": "Sender email/name",
+                      "recipient": "Recipient email/name",
+                      "subject": "Email subject",
+                      "date": "Send date",
+                      "body": "Email content"
+                    }}
+                  ]
+                }}
+
+                If no emails found: {{"count": "0", "response": []}}
+
+                Here is the user's query: {query}"""
             }
         ]
 
@@ -126,12 +156,11 @@ class MCPClient:
         )
 
         # Process response and handle tool calls
-        final_text = []
+        final_text: str = ""
 
         assistant_message_content = []
         for content in response.content:
             if content.type == 'text':
-                final_text.append(content.text)
                 assistant_message_content.append(content)
             elif content.type == 'tool_use':
                 tool_name = content.name
@@ -139,7 +168,6 @@ class MCPClient:
 
                 # Execute tool call
                 result = await self.session.call_tool(tool_name, tool_args)
-                final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
 
                 assistant_message_content.append(content)
                 messages.append({
@@ -165,9 +193,9 @@ class MCPClient:
                     tools=available_tools
                 )
 
-                final_text.append(response.content[0].text)
+                final_text = response.content[0].text
 
-        return "\n".join(final_text)
+        return final_text
 
     async def cleanup(self):
         """Clean up resources"""
@@ -175,6 +203,11 @@ class MCPClient:
             await self.exit_stack.aclose()
             self.session = None  # Explicitly set to None after cleanup
             self.initialised = False
+
+app = FastAPI(title="MCP Client API", lifespan=lifespan)
+
+mcp_client: MCPClient | None = None
+server_script_path: str | None = None
 
 async def get_mcp_client():
     global mcp_client, server_script_path
@@ -189,8 +222,15 @@ async def get_mcp_client():
 async def handle_query(query: Query, mcp_client: MCPClient = Depends(get_mcp_client)):
     try:
         response = await mcp_client.process_query(query.text)
-        return QueryResponse(response=response)
+        # Attempt to parse the response as JSON
+        try:
+            data = json.loads(response)
+            return data
+        except json.JSONDecodeError as e:
+            logger.error(f"JSONDecodeError: {e}, Response: {response}")
+            raise HTTPException(status_code=500, detail=f"Error decoding JSON: {str(e)}.  Raw response: {response}")
     except Exception as e:
+        logger.error(f"General error processing query: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
 @app.get("/status")
