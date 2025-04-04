@@ -115,15 +115,12 @@ async def gmail_mcp():
                 formatted_emails = []
                 for email in search_results:
                     body = email.get('body', '')
-                    attachments = email.get('attachments', [])
-                    attachment_filenames = [attachment['filename'] for attachment in attachments]
 
                     formatted_email = {
                         'id': email.get('id', ''),
                         'subject': email.get('subject', ''),
                         'sender': email.get('sender', ''),
                         'body': body,  # trim?
-                        'attachments': attachment_filenames,
                     }
                     formatted_emails.append(formatted_email)
 

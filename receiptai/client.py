@@ -9,10 +9,12 @@ from pydantic import BaseModel
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-from anthropic import Anthropic
+from langchain_mcp_adapters.tools import load_mcp_tools
+from langgraph.prebuilt import create_react_agent
+from langchain_anthropic import ChatAnthropic
 from dotenv import load_dotenv
 import os
+from templates import EMAIL_SEARCH_TEMPLATE
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -42,7 +44,7 @@ class QueryResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global mcp_client, server_script_path
+    global langgraph_client, server_script_path
 
     # Get server script path from environment variable or use a default
     server_script_path = os.environ.get('MCP_SERVER_SCRIPT')
@@ -51,27 +53,34 @@ async def lifespan(app: FastAPI):
         yield
         return
 
-    logger.info('Initialising MCP client with server script: %s', server_script_path)
-    mcp_client = MCPClient()
+    logger.info('Initialising LangGraph client with server script: %s', server_script_path)
+    langgraph_client = LangGraphClient()
     try:
-        # Initialise the MCP client synchronously to ensure it's ready before serving requests
-        await mcp_client.connect_to_server(server_script_path)
-        logger.info('MCP client successfully initialised')
+        # Initialise the client synchronously to ensure it's ready before serving requests
+        await langgraph_client.connect_to_server(server_script_path)
+        logger.info('LangGraph client successfully initialised')
     except Exception as e:
-        logger.error('Error initialising MCP client: %s', str(e))
+        logger.error('Error initialising LangGraph client: %s', str(e))
 
     yield  # FastAPI will now process requests
 
-    if mcp_client is not None:
-        await mcp_client.cleanup()
-        logger.info('MCP client cleaned up')
+    if langgraph_client is not None:
+        await langgraph_client.cleanup()
+        logger.info('LangGraph client cleaned up successfully')
 
 
-class MCPClient:
+class LangGraphClient:
     def __init__(self):
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
-        self.anthropic = Anthropic()
+        self.model = ChatAnthropic(
+            model_name="claude-3-5-sonnet-20240620",
+            temperature=0,
+            timeout=None,
+            max_retries=2,
+            stop=["end_turn"]
+        )
+        self.agent = None
         self.initialised = False
 
     async def connect_to_server(self, server_script_path: str):
@@ -94,133 +103,101 @@ class MCPClient:
 
         # List available tools
         response = await self.session.list_tools()
-        tools = response.tools
-        logger.info('Connected to server with tools: %s', [tool.name for tool in tools])
+        tools = await load_mcp_tools(self.session)
+
+        logger.info('Connected to server with tools: %s', [tool.name for tool in response.tools])
+
+        # Create the agent
+        self.agent = create_react_agent(self.model, tools)
         self.initialised = True
 
     async def process_query(self, query: str) -> str:
-        """Process a query using Claude and available tools"""
-        if not self.initialised:
-            raise ValueError('MCP Client is not initialised yet')
+            """Process a query using LangGraph agent and available tools"""
+            if not self.initialised:
+                raise ValueError('LangGraph Client is not initialised yet')
 
-        assert self.session is not None, 'Session should be initialised when client is initialised'
+            assert self.session is not None, 'Session should be initialised when client is initialised'
+            assert self.agent is not None, 'Agent should be initialised when client is initialised'
 
-        messages = [
-            {
-                'role': 'user',
-                'content': f"""Answer email search and retrieval requests using appropriate email tools.
-                You are an llm and have no concept of what time it is. When a date is given, just use it. Your response
-                should always be based on the tools results. Never assume a date is in the future. Reason through these
-                    1. Determine required function (search, list, get, filter)
-                    2. Assess provided parameters (sender, recipient, date range, subject keywords, folder, etc)
-                    3. Only decline non-email related queries
-                    4. Infer missing parameters from context when reasonable
-                    5. If critical parameters cannot be inferred, ask for specific missing information
+            prompt = f"{EMAIL_SEARCH_TEMPLATE} \n Here is the user's query: {query}"
 
-                    ONLY return email information in this JSON format:
-                    {{
-                        "count": "Number of emails found",
-                        "results": [
-                          {{
-                            "sender": "Sender email/name",
-                            "recipient": "Recipient email/name",
-                            "subject": "Email subject",
-                            "date": "Send date",
-                            "body": "Email content"
-                          }}
-                        ]
-                    }}
+            # Call the agent
+            agent_response = await self.agent.ainvoke({
+                "messages": [{"role": "user", "content": prompt}]
+            })
 
-                    If no emails found: {{"count": "0", "response": []}}
-                    Just return the response and nothing else
+            # Extract the final response text from the agent response
+            # The last message contains the AIMessage object
+            ai_message = agent_response["messages"][-1]
 
-                    Here is the user's query: {query}""",
-            }
-        ]
+            # Handle different content formats
+            final_response = ""
+            if hasattr(ai_message, "content"):
+                content = ai_message.content
+                # Check if content is a string
+                if isinstance(content, str):
+                    final_response = content
+                # Check if content is a list of content blocks
+                elif isinstance(content, list):
+                    # Concatenate text blocks
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            final_response += block.get("text", "")
 
-        response = await self.session.list_tools()
-        available_tools = [
-            {'name': tool.name, 'description': tool.description, 'input_schema': tool.inputSchema}
-            for tool in response.tools
-        ]
+                # If the response is not JSON, try to extract JSON from it
+                if not final_response.startswith('{'):
+                    # Try to find JSON in the response
+                    import re
+                    json_match = re.search(r'({.*})', final_response, re.DOTALL)
+                    if json_match:
+                        final_response = json_match.group(1)
+            else:
+                # Fallback: try to access content as a property or method
+                try:
+                    if callable(getattr(ai_message, "text", None)):
+                        final_response = ai_message.text()
+                    elif hasattr(ai_message, "text"):
+                        final_response = ai_message.text
+                    else:
+                        logger.warning("Unexpected response format, trying to convert to string")
+                        final_response = str(ai_message)
+                except Exception as e:
+                    logger.error(f"Error extracting content from response: {e}")
+                    final_response = str(ai_message)
 
-        # Initial Claude API call
-        response = self.anthropic.messages.create(
-            model='claude-3-5-sonnet-20241022',
-            max_tokens=1000,
-            messages=messages,
-            tools=available_tools,
-        )
+            return final_response
 
-        # Process response and handle tool calls
-        final_text: str = ''
 
-        assistant_message_content = []
-        for content in response.content:
-            if content.type == 'text':
-                assistant_message_content.append(content)
-            elif content.type == 'tool_use':
-                tool_name = content.name
-                tool_args = content.input
-
-                # Execute tool call
-                result = await self.session.call_tool(tool_name, tool_args)
-
-                assistant_message_content.append(content)
-                messages.append({'role': 'assistant', 'content': assistant_message_content})
-                messages.append(
-                    {
-                        'role': 'user',
-                        'content': [
-                            {
-                                'type': 'tool_result',
-                                'tool_use_id': content.id,
-                                'content': result.content,
-                            }
-                        ],
-                    }
-                )
-
-                # Get next response from Claude
-                response = self.anthropic.messages.create(
-                    model='claude-3-5-sonnet-20241022',
-                    max_tokens=1000,
-                    messages=messages,
-                    tools=available_tools,
-                )
-
-                final_text = response.content[0].text
-
-        return final_text
 
     async def cleanup(self):
         """Clean up resources"""
         if self.initialised:
             await self.exit_stack.aclose()
-            self.session = None  # Explicitly set to None after cleanup
+            self.session = None
+            self.agent = None
             self.initialised = False
 
 
-app = FastAPI(title='MCP Client API', lifespan=lifespan)
+app = FastAPI(title='LangGraph MCP Client API', lifespan=lifespan)
 
-mcp_client: MCPClient | None = None
+langgraph_client: LangGraphClient | None = None
 server_script_path: str | None = None
 
 
-async def get_mcp_client():
-    global mcp_client, server_script_path
-    if mcp_client is None:
-        raise HTTPException(status_code=503, detail='MCP Client not initialised')
-    if not mcp_client.initialised:
-        raise HTTPException(status_code=503, detail='MCP Client initialisation in progress')
-    return mcp_client
+async def get_langchain_client():
+    global langgraph_client, server_script_path
+    if langgraph_client is None:
+        raise HTTPException(status_code=503, detail='LangGraph Client not initialised')
+    if not langgraph_client.initialised:
+        raise HTTPException(status_code=503, detail='LangGraph Client initialisation in progress')
+    return langgraph_client
 
 
 # API endpoints
 @app.post('/query', response_model=QueryResponse)
-async def handle_query(query: Query, mcp_client: MCPClient = Depends(get_mcp_client)):
+async def handle_query(query: Query, langgraph_client: LangGraphClient = Depends(get_langchain_client)):
     try:
-        response = await mcp_client.process_query(query.text)
+        response = await langgraph_client.process_query(query.text)
         # Attempt to parse the response as JSON
         try:
             data = json.loads(response)
@@ -228,7 +205,7 @@ async def handle_query(query: Query, mcp_client: MCPClient = Depends(get_mcp_cli
         except json.JSONDecodeError as e:
             logger.error(f'JSONDecodeError: {e}, Response: {response}')
             raise HTTPException(
-                status_code=500, detail=f'Error decoding JSON: {str(e)}.  Raw response: {response}'
+                status_code=500, detail=f'Error decoding JSON: {str(e)}. Raw response: {response}'
             )
     except Exception as e:
         logger.error(f'General error processing query: {e}')
@@ -237,25 +214,25 @@ async def handle_query(query: Query, mcp_client: MCPClient = Depends(get_mcp_cli
 
 @app.get('/status')
 async def get_status():
-    global mcp_client
-    if mcp_client is None:
+    global langgraph_client
+    if langgraph_client is None:
         return {
             'status': 'not_started',
             'initialised': False,
-            'message': 'MCP Client has not been created',
+            'message': 'LangGraph Client has not been created',
         }
 
-    if not mcp_client.initialised:
+    if not langgraph_client.initialised:
         return {
             'status': 'initialising',
             'initialised': False,
-            'message': 'MCP Client initialisation in progress',
+            'message': 'LangGraph Client initialisation in progress',
         }
 
     return {
         'status': 'ready',
         'initialised': True,
-        'message': 'MCP Client is ready to process queries',
+        'message': 'LangGraph Client is ready to process queries',
     }
 
 
@@ -270,7 +247,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) < 2:
         logger.error(
-            'Usage: python client.py <path_to_server_script> optional[host] optional[port]'
+            'Usage: python ccp.py <path_to_server_script> optional[host] optional[port]'
         )
         sys.exit(1)
 
