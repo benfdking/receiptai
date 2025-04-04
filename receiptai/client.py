@@ -109,33 +109,31 @@ class MCPClient:
             {
                 'role': 'user',
                 'content': f"""Answer email search and retrieval requests using appropriate email tools.
-                Before accessing emails, do some analysis within <thinking></thinking> tags.
-                <thinking>
-                1. Determine required function (search, list, get, filter)
-                2. Assess provided parameters (sender, recipient, date range, subject keywords, folder)
-                3. For empty search results, simply state nothing found
-                4. Only decline non-email related queries
-                5. Infer missing parameters from context when reasonable
-                6. If critical parameters cannot be inferred, ask for specific missing information
-                </thinking>
+                You are an llm and have no concept of what time it is. When a date is given, just use it. Your response
+                should always be based on the tools results. Never assume a date is in the future. Reason through these
+                    1. Determine required function (search, list, get, filter)
+                    2. Assess provided parameters (sender, recipient, date range, subject keywords, folder, etc)
+                    3. Only decline non-email related queries
+                    4. Infer missing parameters from context when reasonable
+                    5. If critical parameters cannot be inferred, ask for specific missing information
 
-                ONLY return email information in this JSON format:
-                {{
-                  "count": "Number of emails found",
-                  "results": [
+                    ONLY return email information in this JSON format:
                     {{
-                      "sender": "Sender email/name",
-                      "recipient": "Recipient email/name",
-                      "subject": "Email subject",
-                      "date": "Send date",
-                      "body": "Email content"
+                        "count": "Number of emails found",
+                        "results": [
+                          {{
+                            "sender": "Sender email/name",
+                            "recipient": "Recipient email/name",
+                            "subject": "Email subject",
+                            "date": "Send date",
+                            "body": "Email content"
+                          }}
+                        ]
                     }}
-                  ]
-                }}
 
-                If no emails found: {{"count": "0", "response": []}}
+                    If no emails found: {{"count": "0", "response": []}}
 
-                Here is the user's query: {query}""",
+                    Here is the user's query: {query}""",
             }
         ]
 
