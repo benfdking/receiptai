@@ -1,5 +1,5 @@
 dev:
-	@python receiptai/client.py receiptai/main.py
+	@python receiptai/client.py receiptai/gmail_mcp.py
 
 lint:
 	ruff check .

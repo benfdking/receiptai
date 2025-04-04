@@ -1,6 +1,6 @@
 # Receipt AI
 
-npm run [timestamp] [name] [amount] [currency] [folder_to_dump]
+npm run [timestamp] [id] [merchant_name] [amount] [currency] [folder_to_dump]
 
 uv run main.py
 
@@ -25,3 +25,11 @@ TOKEN_JSON_PATH=example._str
 
 ### Cmd
 `make dev`
+
+
+### run
+Trigger
+- Download transaction from brex -step
+- Identify transactions without receipts -step
+- Call tool to search for receipts (linear) {id; loc;}
+- Upload transaction receipts

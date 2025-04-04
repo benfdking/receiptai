@@ -132,6 +132,7 @@ class MCPClient:
                     }}
 
                     If no emails found: {{"count": "0", "response": []}}
+                    Just return the response and nothing else
 
                     Here is the user's query: {query}""",
             }
