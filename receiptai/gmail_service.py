@@ -3,6 +3,7 @@ from typing import Any
 import json
 import os
 import logging
+import base64
 
 from email.header import decode_header
 from base64 import urlsafe_b64decode
@@ -277,3 +278,74 @@ class GmailService:
             error_msg = f'An HttpError occurred: {str(error)}'
             logger.error(error_msg)
             return error_msg
+
+    async def get_email_attachments(self, email_id: str) -> Union[List[Dict[str, Any]], str]:
+            """
+            Retrieve all attachments from a specific email by its ID.
+            Returns a list of dictionaries, each containing:
+                - filename
+                - mimeType
+                - data (raw byte content or base64-encoded string)
+            If no attachments found or an error occurs, returns an empty list or error string.
+            """
+            try:
+                message = self.service.users().messages().get(
+                    userId='me', id=email_id, format='full'
+                ).execute()
+
+                payload = message.get('payload', {})
+                attachments = []
+                self._extract_attachments(payload, email_id, attachments)
+                return attachments
+
+            except HttpError as error:
+                error_msg = f"An error occurred when fetching email attachments: {error}"
+                logger.error(error_msg)
+                return error_msg
+
+    def _extract_attachments(self, payload: Dict[str, Any], email_id: str, attachments_list: List[Dict[str, Any]]):
+        """
+        Recursively traverses the parts of an email payload to find attachments.
+
+        If an attachment is found (identified by filename and attachmentId), it downloads the attachment data,
+        decodes it from its URL-safe Base64 encoding, and then re-encodes it to a standard Base64 string
+        for inclusion in the attachments list.
+
+        Args:
+            payload (Dict[str, Any]): The payload of the email message, which may contain nested parts.
+            email_id (str): The ID of the email message.
+            attachments_list (List[Dict[str, Any]]): A list to which the extracted attachment information will be appended.
+        """
+        parts = payload.get('parts', [])
+        for part in parts:
+            filename = part.get('filename')
+            body = part.get('body', {})
+            mime_type = part.get('mimeType')
+            attachment_id = body.get('attachmentId')
+
+            # If the part has a filename and an attachmentId, it's likely an attachment
+            if filename and attachment_id:
+                attachment_data = self.service.users().messages().attachments().get(
+                    userId='me',
+                    messageId=email_id,
+                    id=attachment_id
+                ).execute()
+
+                data = attachment_data.get('data', '')
+
+                if isinstance(data, str):
+                    data = data.encode('utf-8')
+
+                file_data = urlsafe_b64decode(data)
+
+                file_data_encoded = base64.b64encode(file_data).decode('utf-8')
+
+                attachments_list.append({
+                    'filename': filename,
+                    'mimeType': mime_type,
+                    'data': file_data_encoded
+                })
+
+            # If there are nested parts, recurse
+            if 'parts' in part:
+                self._extract_attachments(part, email_id, attachments_list)

@@ -2,6 +2,7 @@ import json
 import os
 import asyncio
 import logging
+from typing import cast
 from dotenv import load_dotenv
 
 from mcp.server.models import InitializationOptions
@@ -63,6 +64,15 @@ async def gmail_mcp():
                         }
                     },
                     'required': ['query'],
+                },
+            ),
+            types.Tool(
+                name="get-email-attachments",
+                description="Retrieve attachments from a specific email by its ID",
+                inputSchema={
+                    "type": "object",
+                    "properties": {"email_id": {"type": "string"}},
+                    "required": ["email_id"]
                 },
             ),
         ]
@@ -132,6 +142,22 @@ async def gmail_mcp():
                 ]
             else:
                 return [types.TextContent(type='text', text=str(search_results))]
+
+        elif name == 'get-email-attachments':
+            if not arguments or 'email_id' not in arguments:
+                return [
+                    types.TextContent(
+                        type='text', text='Query parameter is required for search-emails tool.'
+                    )
+                ]
+
+            email_id = cast(str, arguments.get("email_id"))
+            attachments = await gmail_service.get_email_attachments(email_id)
+            return [types.TextContent(
+                            type="text",
+                            text=json.dumps(attachments, indent=2)
+            )]
+
         else:
             logger.error(f'Unknown tool: {name}')
             raise ValueError(f'Unknown tool: {name}')
