@@ -13,6 +13,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from fs import AttachmentResponse
 from googleapiclient.errors import HttpError
 
 # Configure logging
@@ -279,7 +280,7 @@ class GmailService:
             logger.error(error_msg)
             return error_msg
 
-    async def get_email_attachments(self, email_id: str) -> Union[List[Dict[str, Any]], str]:
+    async def get_email_attachments(self, email_id: str) -> Union[List[AttachmentResponse], str]:
             """
             Retrieve all attachments from a specific email by its ID.
             Returns a list of dictionaries, each containing:
