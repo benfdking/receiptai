@@ -10,4 +10,27 @@ dependencies = [
     "google-api-python-client>=2.156.0",
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.2.1",
+    "anthropic>=0.49.0",
+    "python-dotenv>=1.1.0",
+    "openapi-python-client>=0.24.3",
 ]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.3.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "auto"
