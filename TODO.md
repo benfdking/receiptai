@@ -9,5 +9,6 @@
 - [x] Force token.json reslate on offline error access (Jimmy)
 - [x] Add ability to do search
 - [x] Add instructions on how to run it (Jimmy) (kind of done)
+- [ ] Add get raw option for when the email itself is the receipt. ie get raw html from email body
 
 # Goal: Can we do it as in through website
