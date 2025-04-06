@@ -1,4 +1,3 @@
-
 from typing import Any
 import json
 import os
@@ -15,6 +14,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from fs import AttachmentResponse
 from googleapiclient.errors import HttpError
+from bs4 import BeautifulSoup
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -181,24 +181,27 @@ class GmailService:
 
             mime_message = message_from_bytes(decoded_data)
 
-            # Extract email body
-            body = None
-            if mime_message.is_multipart():
-                for part in mime_message.walk():
-                    # Extract the text/plain part
-                    if part.get_content_type() == 'text/plain':
-                        body = part.get_payload(decode=True)
+            body_content = None
 
+            # Try to get plain text first
+            for part in mime_message.walk():
+                if part.get_content_type() == 'text/plain':
+                    body = part.get_payload(decode=True)
                     if body and isinstance(body, bytes):
-                        body = body.decode(errors='replace')
+                        body_content = body.decode(errors='replace')
                     break
-            else:
-                # For non-multipart messages
-                body = mime_message.get_payload(decode=True)
-                if body and isinstance(body, bytes):
-                    body = body.decode(errors='replace')
 
-            email_metadata['body'] = body or '[No text content found]'
+            # If no plain text, try to get text from HTML
+            if body_content is None:
+                for part in mime_message.walk():
+                    if part.get_content_type() == 'text/html':
+                        html_body = part.get_payload(decode=True)
+                        if html_body and isinstance(html_body, bytes):
+                            soup = BeautifulSoup(html_body.decode(errors='replace'), 'html.parser')
+                            body_content = soup.get_text(separator='\n', strip=True)
+                        break
+
+            email_metadata['body'] = body_content or '[No text content found]'
 
             # Extract metadata
             email_metadata['subject'] = decode_mime_header(
@@ -216,11 +219,15 @@ class GmailService:
                     continue
                 filename = part.get_filename()
                 if filename:
+                    payload = part.get_payload(decode=True)
+                    content = ''
+                    if isinstance(payload, bytes):
+                        content = payload.decode(errors='ignore')
+                    elif isinstance(payload, str):
+                        content = payload
                     attachment = {
                         'filename': filename,
-                        'content': part.get_payload(decode=True).decode(errors='ignore')
-                        if part.get_payload(decode=True)
-                        else '',
+                        'content': content,
                     }
                     attachments.append(attachment)
             email_metadata['attachments'] = attachments
@@ -242,7 +249,7 @@ class GmailService:
 
         Args:
             query (str): Gmail search query (e.g., 'from:example@gmail.com', 'subject:hello',
-                        'after:2023/04/14 before:2023/04/16 (subject:"Amazon" OR "Amazon") £42.99'
+                            'after:2023/04/14 before:2023/04/16 (subject:"Amazon" OR "Amazon") £42.99'
         """
         try:
             user_id = 'me'
@@ -281,28 +288,28 @@ class GmailService:
             return error_msg
 
     async def get_email_attachments(self, email_id: str) -> Union[List[AttachmentResponse], str]:
-            """
-            Retrieve all attachments from a specific email by its ID.
-            Returns a list of dictionaries, each containing:
-                - filename
-                - mimeType
-                - data (raw byte content or base64-encoded string)
-            If no attachments found or an error occurs, returns an empty list or error string.
-            """
-            try:
-                message = self.service.users().messages().get(
-                    userId='me', id=email_id, format='full'
-                ).execute()
+        """
+        Retrieve all attachments from a specific email by its ID.
+        Returns a list of dictionaries, each containing:
+            - filename
+            - mimeType
+            - data (raw byte content or base64-encoded string)
+        If no attachments found or an error occurs, returns an empty list or error string.
+        """
+        try:
+            message = self.service.users().messages().get(
+                userId='me', id=email_id, format='full'
+            ).execute()
 
-                payload = message.get('payload', {})
-                attachments = []
-                self._extract_attachments(payload, email_id, attachments)
-                return attachments
+            payload = message.get('payload', {})
+            attachments = []
+            self._extract_attachments(payload, email_id, attachments)
+            return attachments
 
-            except HttpError as error:
-                error_msg = f"An error occurred when fetching email attachments: {error}"
-                logger.error(error_msg)
-                return error_msg
+        except HttpError as error:
+            error_msg = f"An error occurred when fetching email attachments: {error}"
+            logger.error(error_msg)
+            return error_msg
 
     def _extract_attachments(self, payload: Dict[str, Any], email_id: str, attachments_list: List[Dict[str, Any]]):
         """
