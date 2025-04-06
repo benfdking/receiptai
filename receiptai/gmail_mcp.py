@@ -105,7 +105,7 @@ async def gmail_mcp():
                 for email in unread_emails:
                     body = email.get('body', '')
                     body_preview = (
-                        body[:200].replace('\n', ' ') + '...' if len(body) > 200 else body
+                        body.replace('\n', ' ')
                     )
 
                     formatted_email = {
