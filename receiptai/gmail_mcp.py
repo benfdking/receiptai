@@ -1,3 +1,4 @@
+from operator import not_
 import json
 import os
 import asyncio
@@ -80,6 +81,20 @@ async def gmail_mcp():
                 },
             ),
             types.Tool(
+                name="get-email-body-as-attachment",
+                description="Retrieve the body of an email as an attachment",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "email_id": {"type": "string"},
+                        "filename": {"type": "string"},
+                        "mimeType": {"type": "string"},
+                        "data": {"type": "string"}
+                    },
+                    "required": ["email_id", "filename", "mimeType", "data"]
+                },
+            ),
+            types.Tool(
                 name="save-email-attachments",
                 description="Retrieve and saves all from a specific email by its ID to a file system",
                 inputSchema={
@@ -90,6 +105,18 @@ async def gmail_mcp():
                     "required": ["email_id"]
                 },
             ),
+
+            types.Tool(
+                name="save-content-as-attachment",
+                description="Save content as an attachment to a file system",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "email_id": {"type": "string"},
+                    },
+                    "required": ["email_id"]
+                },
+            )
         ]
 
     @server.call_tool()
@@ -275,6 +302,84 @@ async def gmail_mcp():
                 type="text",
                 text=json.dumps(response, indent=2)
             )]
+
+        elif name == "get-email-body-as-attachment":
+            if not arguments or 'email_id' not in arguments:
+                return [types.TextContent(
+                    type="text",
+                    text="Missing email_id argument"
+                )]
+            email_id = arguments['email_id']
+            try:
+                email = await gmail_service.get_email_body_as_attachment(email_id)
+                return [types.TextContent(
+                    type="text",
+                    text=json.dumps(email, indent=2)
+                )]
+            except Exception as e:
+                return [types.TextContent(
+                    type="text",
+                    text=f"Error fetching email: {str(e)}"
+                )]
+
+        elif name == "save-content-as-attachment":
+            if not arguments or 'email_id' not in arguments:
+                return [types.TextContent(
+                    type="text",
+                    text="Missing email_id argument"
+                )]
+            email_id = arguments['email_id']
+            try:
+                attachment_response = await gmail_service.get_email_body_as_attachment(email_id)
+
+                attachment_response = cast(dict, attachment_response)
+                # Get email details from the response
+                filename = attachment_response.get("filename", f"email_{email_id}.html")
+                mime_type = attachment_response.get("mimeType", "text/html")
+                content = attachment_response.get("data")
+
+                if not content:
+                    return [types.TextContent(
+                        type="text",
+                        text=json.dumps({
+                            "status": "error",
+                            "message": "No content to save in the email body"
+                        }, indent=2)
+                    )]
+
+                # Save the content to the file system
+                safe_filename = os.path.basename(filename)  # Prevent path traversal
+
+                # Handle potential duplicate filenames
+                if os.path.exists(os.path.join(file_system.base_directory, safe_filename)):
+                    now = datetime.now()
+                    timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+                    base, ext = os.path.splitext(safe_filename)
+                    safe_filename = f"{base}_{timestamp}{ext}"
+
+                # Save the file
+                saved_path = file_system.save_file(safe_filename, mime_type, content)
+
+                return [types.TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "status": "success",
+                        "message": "Email content saved successfully",
+                        "email_id": email_id,
+                        "saved_path": saved_path,
+                        "filename": safe_filename,
+                        "mimeType": mime_type
+                    }, indent=2)
+                )]
+            except Exception as e:
+                return [types.TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "status": "error",
+                        "message": f"Error saving email content: {str(e)}",
+                        "email_id": email_id
+                    }, indent=2)
+                )]
 
         else:
             logger.error(f'Unknown tool: {name}')
