@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from langchain_mcp_adapters.client import MultiServerMCPClient, StdioConnection
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 import os
 from templates import EMAIL_SEARCH_TEMPLATE
 
@@ -44,12 +45,10 @@ class LangGraphClient:
     def __init__(self):
         self.session: Optional[MultiServerMCPClient] = None
         self.exit_stack = AsyncExitStack()
-        self.model = ChatAnthropic(
-            model_name="claude-3-5-sonnet-20240620",
+        self.model = ChatOllama(
+            model="llama3.1:8b",
             temperature=0,
-            timeout=None,
-            max_retries=2,
-            stop=["end_turn"]
+            num_predict=256,
         )
         self.mcpClient = None
         self.agent = None
