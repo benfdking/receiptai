@@ -60,6 +60,16 @@ class LocalFileSystem(FileSystem):
         'application/json': b'{',
     }
 
+    MIME_SIGNATURES_EXTENSIONS: Dict[str, str] = {
+        'application/pdf': 'pdf',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'application/zip': 'zip',
+        'application/x-gzip': 'gz',
+        'text/html': 'html',
+        'application/json': 'json',
+    }
+
     def __init__(self, base_directory: str = '.'):
         """
         Initialize the local file system.
@@ -121,7 +131,15 @@ class LocalFileSystem(FileSystem):
         Returns:
             The path to the saved file.
         """
-        full_path = self._get_full_path(filename)
+
+        # Check MIME type against file extension
+        if mimeType in self.MIME_SIGNATURES:
+            if mimeType not in self.MIME_SIGNATURES_EXTENSIONS:
+                logger.info(f"No file extension found for MIME type: {mimeType}")
+
+        file_extension = self.MIME_SIGNATURES_EXTENSIONS[mimeType]
+
+        full_path = self._get_full_path(f"{filename}.{file_extension}")
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
         # Handle both string and binary data
