@@ -14,3 +14,7 @@ creds/
 
 #env
 .env
+
+# os generated files
+.dist
+.DS_Store
