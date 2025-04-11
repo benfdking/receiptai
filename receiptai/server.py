@@ -1,11 +1,8 @@
 from contextlib import asynccontextmanager
 import json
 import logging
+from client import LangGraphClient, Query, QueryResponse, get_langchain_client
 from fastapi import FastAPI, Depends, HTTPException
-from langgraph.client import LangGraphClient
-from langgraph.client.dependencies import get_langchain_client
-from langgraph.client.models import Query, QueryResponse
-from langgraph.client.server import lifespan
 import os
 import uvicorn
 from dotenv import load_dotenv
@@ -17,10 +14,6 @@ logging.basicConfig(
 )
 
 load_dotenv()
-
-app = FastAPI(title='LangGraph MCP Client API', lifespan=lifespan)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global langgraph_client, server_script_path
@@ -47,6 +40,7 @@ async def lifespan(app: FastAPI):
         await langgraph_client.cleanup()
         logger.info('LangGraph client cleaned up successfully')
 
+app = FastAPI(title='LangGraph MCP Client API', lifespan=lifespan)
 
 # API endpoints
 @app.post('/query', response_model=QueryResponse)
