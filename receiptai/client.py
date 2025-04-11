@@ -7,9 +7,7 @@ import uvicorn
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from langchain_mcp_adapters.tools import load_mcp_tools
+from langchain_mcp_adapters.client import MultiServerMCPClient, StdioConnection
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
 from dotenv import load_dotenv
@@ -71,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 class LangGraphClient:
     def __init__(self):
-        self.session: Optional[ClientSession] = None
+        self.session: Optional[MultiServerMCPClient] = None
         self.exit_stack = AsyncExitStack()
         self.model = ChatAnthropic(
             model_name="claude-3-5-sonnet-20240620",
@@ -80,6 +78,7 @@ class LangGraphClient:
             max_retries=2,
             stop=["end_turn"]
         )
+        self.mcpClient = None
         self.agent = None
         self.initialised = False
 
@@ -89,26 +88,44 @@ class LangGraphClient:
         Args:
             server_script_path: Path to the server script
         """
-        server_params = StdioServerParameters(command='python', args=[server_script_path], env=None)
+        GmailMcpOpts: StdioConnection = {
+                "command": "python",
+                "args": [server_script_path],
+                "transport": "stdio",
+                "env": None,
+                "cwd": None,
+                "encoding_error_handler": "strict",
+                "session_kwargs": None,
+                "encoding": "utf-8"
+            }
 
-        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
-        self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(
-            ClientSession(self.stdio, self.write)
+        TimeMcpOpts: StdioConnection = {
+                "command": "python",
+                "args": ["receiptai/time_mcp.py"],
+                "transport": "stdio",
+                "env": None,
+                "cwd": None,
+                "encoding_error_handler": "strict",
+                "session_kwargs": None,
+                "encoding": "utf-8"
+            }
+
+        client = await self.exit_stack.enter_async_context(
+            MultiServerMCPClient({
+                "gmail": GmailMcpOpts,
+                "time": TimeMcpOpts
+            })
         )
+
+        self.session = client
+        response = client.get_tools()
+        self.agent = create_react_agent(self.model, client.get_tools())
 
         # self.session is guaranteed to be non-None at this point
         assert self.session is not None, 'Session should be initialised'
-        await self.session.initialize()
 
-        # List available tools
-        response = await self.session.list_tools()
-        tools = await load_mcp_tools(self.session)
+        logger.info('Connected to server with tools: %s', [tool.name for tool in response])
 
-        logger.info('Connected to server with tools: %s', [tool.name for tool in response.tools])
-
-        # Create the agent
-        self.agent = create_react_agent(self.model, tools)
         self.initialised = True
 
     async def process_query(self, query: str) -> str:
