@@ -7,7 +7,7 @@ import base64
 from email.header import decode_header
 from base64 import urlsafe_b64decode
 from email import message_from_bytes
-from typing import List, Dict, Union
+from typing import List, Dict, Union, cast
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -311,6 +311,67 @@ class GmailService:
             logger.error(error_msg)
             return error_msg
 
+    async def get_email_body_as_attachment(self, email_id: str) -> Union[AttachmentResponse, str]:
+        """
+        Extracts the email body as an attachment if HTML, or returns plain text.
+
+        Args:
+            email_id (str): The ID of the email to extract
+
+        Returns:
+            Union[AttachmentResponse, str]: AttachmentResponse with HTML data or plain text string
+        """
+        try:
+            # Get the raw message
+            msg = (
+                self.service.users()
+                .messages()
+                .get(userId='me', id=email_id, format='raw')
+                .execute()
+            )
+
+            raw_data = msg['raw']
+            decoded_data = urlsafe_b64decode(raw_data)
+            mime_message = message_from_bytes(decoded_data)
+
+            # Extract subject for filename
+            subject = decode_mime_header(mime_message.get('subject', 'No Subject'))
+            # Use standard library function to sanitize filename
+            import re
+            safe_subject = re.sub(r'[^\w\s-]', '_', subject)
+            safe_subject = re.sub(r'\s+', '_', safe_subject)
+
+            # Check for HTML content first
+            for part in mime_message.walk():
+                if part.get_content_type() == 'text/html':
+                    html_body = part.get_payload(decode=True)
+                    if html_body and isinstance(html_body, bytes):
+                        html_content = html_body.decode(errors='replace')
+                        html_bytes = html_content.encode('utf-8')
+                        html_encoded = base64.b64encode(html_bytes).decode('utf-8')
+
+                        # Create an AttachmentResponse instance
+                        return cast(AttachmentResponse,{
+                            "email": email_id,
+                            "filename" :f"Email_{safe_subject[:30]}_{email_id[:8]}",
+                            "mimeType":"text/html",
+                            "data":html_encoded
+                        })
+
+            # If no HTML, return plain text as string
+            for part in mime_message.walk():
+                if part.get_content_type() == 'text/plain':
+                    text_body = part.get_payload(decode=True)
+                    if text_body and isinstance(text_body, bytes):
+                        return text_body.decode(errors='replace')
+
+            return "No content found in email body"
+
+        except Exception as error:
+            error_msg = f"An error occurred extracting email body: {error}"
+            logger.error(error_msg)
+            return error_msg
+
     def _extract_attachments(self, payload: Dict[str, Any], email_id: str, attachments_list: List[Dict[str, Any]]):
         """
         Recursively traverses the parts of an email payload to find attachments.
@@ -349,6 +410,7 @@ class GmailService:
                 file_data_encoded = base64.b64encode(file_data).decode('utf-8')
 
                 attachments_list.append({
+                    "email": email_id,
                     'filename': filename,
                     'mimeType': mime_type,
                     'data': file_data_encoded
