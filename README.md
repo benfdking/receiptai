@@ -33,3 +33,7 @@ Trigger
 - Identify transactions without receipts -step
 - Call tool to search for receipts (linear) {id; loc;}
 - Upload transaction receipts
+
+
+What I want 
+def get_the_receipt(transaction: Transaction) -> TransactionWithDocument:
