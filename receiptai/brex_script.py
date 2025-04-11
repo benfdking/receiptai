@@ -35,7 +35,7 @@ async def main():
             amount=expense.original_amount.amount,
             currency=expense.original_amount.currency,
             date=expense.purchased_at,
-            description=expense.merchant.raw_descriptor,
+            merchant=expense.merchant.raw_descriptor,
         )
         for expense in response.items
         if expense.receipts is None

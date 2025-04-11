@@ -7,11 +7,9 @@ class Transaction(BaseModel):
     amount: float
     currency: str
     date: datetime
-    description: str
+    merchant: str
 
 class TransactionWithDocument(BaseModel):
     transaction: Transaction
     document: Path
-
-
 
