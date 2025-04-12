@@ -86,12 +86,9 @@ async def gmail_mcp():
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "email_id": {"type": "string"},
-                        "filename": {"type": "string"},
-                        "mimeType": {"type": "string"},
-                        "data": {"type": "string"}
+                        "email_id": {"type": "string"}
                     },
-                    "required": ["email_id", "filename", "mimeType", "data"]
+                    "required": ["email_id"]
                 },
             ),
             types.Tool(
@@ -107,8 +104,8 @@ async def gmail_mcp():
             ),
 
             types.Tool(
-                name="save-content-as-attachment",
-                description="Save content as an attachment to a file system",
+                name="save-email-content-as-attachment",
+                description="Save email content as an attachment to a file system",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -322,7 +319,7 @@ async def gmail_mcp():
                     text=f"Error fetching email: {str(e)}"
                 )]
 
-        elif name == "save-content-as-attachment":
+        elif name == "save-email-content-as-attachment":
             if not arguments or 'email_id' not in arguments:
                 return [types.TextContent(
                     type="text",
@@ -332,9 +329,9 @@ async def gmail_mcp():
             try:
                 attachment_response = await gmail_service.get_email_body_as_attachment(email_id)
 
-                attachment_response = cast(dict, attachment_response)
+                attachment_response = cast(dict[str, str], attachment_response)
                 # Get email details from the response
-                filename = attachment_response.get("filename", f"email_{email_id}.html")
+                filename = attachment_response.get("filename", f"email_{email_id}")
                 mime_type = attachment_response.get("mimeType", "text/html")
                 content = attachment_response.get("data")
 
@@ -348,7 +345,7 @@ async def gmail_mcp():
                     )]
 
                 # Save the content to the file system
-                safe_filename = os.path.basename(filename)  # Prevent path traversal
+                safe_filename = os.path.basename(filename)
 
                 # Handle potential duplicate filenames
                 if os.path.exists(os.path.join(file_system.base_directory, safe_filename)):
@@ -357,8 +354,8 @@ async def gmail_mcp():
                     base, ext = os.path.splitext(safe_filename)
                     safe_filename = f"{base}_{timestamp}{ext}"
 
-                # Save the file
-                saved_path = file_system.save_file(safe_filename, mime_type, content)
+                # Save file
+                saved_path = file_system.save_file(safe_filename, mime_type, content, True)
 
                 return [types.TextContent(
                     type="text",

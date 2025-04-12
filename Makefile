@@ -1,10 +1,13 @@
-.PHONY: dev inspect lint format generate-api-client
+.PHONY: dev inspect test lint format generate-api-client
 
 dev:
 	@python receiptai/client.py receiptai/gmail_mcp.py
 
 inspect:
 	@mcp dev receiptai/gmail_mcp.py
+
+test:
+	@pytest -v
 
 lint:
 	ruff check .
