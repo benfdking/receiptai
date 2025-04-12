@@ -1,25 +1,25 @@
 from typing import Optional
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack
 import logging
-import json
+import os
 
-import uvicorn
-from fastapi import FastAPI, Depends, HTTPException
+from dotenv.main import load_dotenv
+from fastapi import HTTPException, Request
 from pydantic import BaseModel
 
 from langchain_mcp_adapters.client import MultiServerMCPClient, StdioConnection
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
-import os
 from templates import EMAIL_SEARCH_TEMPLATE
+from enum import Enum
+
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-
 
 # FastAPI models
 class Query(BaseModel):
@@ -38,21 +38,41 @@ class QueryResponse(BaseModel):
     count: str
     results: list[EmailDetails]
 
+load_dotenv()
 
+ENVCONFIG_MODEL=os.environ.get("ENVCONFIG_MODEL", "llama3.1:8b")
+ENVCONFIG_MODEL=os.environ.get("MODEL_CHOICE", "local")
+
+
+
+
+class ModelChoice(Enum):
+    LOCAL = "local"
+    REMOTE = "remote"
 
 
 class LangGraphClient:
     def __init__(self):
         self.session: Optional[MultiServerMCPClient] = None
         self.exit_stack = AsyncExitStack()
-        self.model = ChatOllama(
-            model="llama3.1:8b",
-            temperature=0,
-            num_predict=256,
-        )
         self.mcpClient = None
         self.agent = None
         self.initialised = False
+
+        if ENVCONFIG_MODEL == ModelChoice.LOCAL:
+            self.model = ChatOllama(
+                model=ENVCONFIG_MODEL,
+                temperature=0,
+                num_predict=256,
+            )
+        else:
+            self.model = ChatAnthropic(
+                        model_name="claude-3-5-sonnet-20240620",
+                        temperature=0,
+                        timeout=None,
+                        max_retries=2,
+                        stop=["end_turn"]
+                    )
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -168,16 +188,15 @@ class LangGraphClient:
 
 
 
-langgraph_client: LangGraphClient | None = None
-server_script_path: str | None = None
 
+def get_langchain_client(request: Request) -> LangGraphClient:
+    """Get the LangGraph client from the app state."""
+    if not hasattr(request.app, "langgraph_client"):
+        raise HTTPException(status_code=503, detail='LangGraph Client not initialized')
 
-async def get_langchain_client():
-    global langgraph_client, server_script_path
-    if langgraph_client is None:
-        raise HTTPException(status_code=503, detail='LangGraph Client not initialised')
-    if not langgraph_client.initialised:
-        raise HTTPException(status_code=503, detail='LangGraph Client initialisation in progress')
-    return langgraph_client
-
-
+    client = request.app.langgraph_client
+    if client is None:
+        raise HTTPException(status_code=503, detail='LangGraph Client not initialized')
+    if not client.initialised:
+        raise HTTPException(status_code=503, detail='LangGraph Client initialization in progress')
+    return client

@@ -1,0 +1,17 @@
+meta {
+  name: status
+  type: http
+  seq: 3
+}
+
+get {
+  url: http://127.0.0.1:8000/status
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "text": "Can you go save the email attachment for the email fowarded to me about View your Microsoft 365 Business Premium invoice invoice today"  
+  }
+}
