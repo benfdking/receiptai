@@ -27,17 +27,17 @@ async def lifespan(app: FastAPI):
         return
 
     logger.info('Initialising LangGraph client with server script: %s', server_script_path)
-    app.langgraph_client = LangGraphClient()
+    app.langgraph_client = LangGraphClient()  #pyright: ignore
     try:
-        await app.langgraph_client.connect_to_server(server_script_path)
+        await app.langgraph_client.connect_to_server(server_script_path) #pyright: ignore
         logger.info('LangGraph client successfully initialised')
     except Exception as e:
         logger.error('Error initialising LangGraph client: %s', str(e))
 
     yield
 
-    if hasattr(app, "langgraph_client") and app.langgraph_client is not None:
-        await app.langgraph_client.cleanup()
+    if hasattr(app, "langgraph_client") and app.langgraph_client is not None: #pyright: ignore
+        await app.langgraph_client.cleanup() #pyright: ignore
         logger.info('LangGraph client cleaned up successfully')
 
 app = FastAPI(title='LangGraph MCP Client API', lifespan=lifespan)
