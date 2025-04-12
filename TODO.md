@@ -11,5 +11,6 @@
 - [x] Add instructions on how to run it (Jimmy) (kind of done)
 - [ ] Add get raw option for when the email itself is the receipt. ie get raw html from email body
 - [ ] Conform response shape on initialisation for multi server startup
+- [ ] Save html to file as pdf
 
 # Goal: Can we do it as in through website
