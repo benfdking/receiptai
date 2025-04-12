@@ -191,14 +191,48 @@ class GmailService:
                         body_content = body.decode(errors='replace')
                     break
 
-            # If no plain text, try to get text from HTML
             if body_content is None:
                 for part in mime_message.walk():
                     if part.get_content_type() == 'text/html':
                         html_body = part.get_payload(decode=True)
                         if html_body and isinstance(html_body, bytes):
                             soup = BeautifulSoup(html_body.decode(errors='replace'), 'html.parser')
-                            body_content = soup.get_text(separator='\n', strip=True)
+
+                            # Remove script and style elements
+                            for script in soup(["script", "style"]):
+                                script.extract()
+
+                            # Handle links - preserve URL information by replacing with "[text](url)"
+                            for link in soup.find_all('a'):
+                                href = link.get('href')
+                                if href:
+                                    link_text = link.get_text(strip=True) or href
+                                    link.replace_with(f"{link_text} {href}")
+
+                            # Extract text with better formatting
+                            lines = []
+                            for element in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'li']):
+                                text = element.get_text(strip=True)
+                                if text:
+                                    if element.name.startswith('h'):
+                                        level = int(element.name[1])
+                                        if level == 1:
+                                            lines.append(f"\n{'=' * len(text)}\n{text}\n{'=' * len(text)}")
+                                        elif level == 2:
+                                            lines.append(f"\n{text}\n{'-' * len(text)}")
+                                        else:
+                                            lines.append(f"\n{text}")
+                                    elif element.name == 'li':
+                                        lines.append(f"• {text}")
+                                    else:
+                                        lines.append(text)
+
+                            # If no structured elements found, fall back to regular text extraction
+                            if not lines:
+                                lines = soup.get_text(separator='\n', strip=True).split('\n')
+
+                            # Filter out empty lines and join with double newlines for paragraph separation
+                            body_content = '\n'.join(line for line in lines if line.strip())
                         break
 
             email_metadata['body'] = body_content or '[No text content found]'
@@ -208,29 +242,6 @@ class GmailService:
                 mime_message.get('subject', 'No Subject')
             )
             email_metadata['sender'] = mime_message.get('from', 'Unknown Sender')
-
-            # Extract attachments
-            attachments = []
-            for part in mime_message.walk():
-                if (
-                    part.get_content_maintype() == 'multipart'
-                    or part.get('Content-Disposition') is None
-                ):
-                    continue
-                filename = part.get_filename()
-                if filename:
-                    payload = part.get_payload(decode=True)
-                    content = ''
-                    if isinstance(payload, bytes):
-                        content = payload.decode(errors='ignore')
-                    elif isinstance(payload, str):
-                        content = payload
-                    attachment = {
-                        'filename': filename,
-                        'content': content,
-                    }
-                    attachments.append(attachment)
-            email_metadata['attachments'] = attachments
 
             logger.info(f'Retrieved details for email: {email_id}')
 
