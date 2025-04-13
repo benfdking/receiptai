@@ -3,9 +3,17 @@ from datetime import date
 from unittest.mock import patch
 
 from time_mcp import (
-    get_today, get_tomorrow, get_next_week, get_last_week,
-    get_next_month, get_last_month, get_next_year, get_last_year,
-    get_specific_range, get_relative_date, get_past_relative_date
+    get_last_month,
+    get_last_week,
+    get_last_year,
+    get_next_month,
+    get_next_week,
+    get_next_year,
+    get_past_relative_date,
+    get_relative_date,
+    get_specific_range,
+    get_today,
+    get_tomorrow,
 )
 
 
@@ -20,7 +28,7 @@ class TestDateFunctions(unittest.TestCase):
         mock_date.today.return_value = mock_today
 
         result = get_today()
-        self.assertEqual(result, "2023-05-15")
+        self.assertEqual(result, '2023-05-15')
         mock_date.today.assert_called_once()
 
     @patch('time_mcp.date')
@@ -33,7 +41,7 @@ class TestDateFunctions(unittest.TestCase):
         mock_date.side_effect = lambda *args, **kwargs: date(*args, **kwargs)
 
         result = get_tomorrow()
-        self.assertEqual(result, "2023-05-16")
+        self.assertEqual(result, '2023-05-16')
 
     @patch('time_mcp.date')
     def test_get_next_week(self, mock_date):

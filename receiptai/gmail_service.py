@@ -1,24 +1,24 @@
-from typing import Any
-import json
-import os
-import logging
 import base64
-
-from email.header import decode_header
+import json
+import logging
+import os
 from base64 import urlsafe_b64decode
 from email import message_from_bytes
-from typing import List, Dict, Union, cast
+from email.header import decode_header
+from typing import Any, Dict, List, Union, cast
+
+from bs4 import BeautifulSoup
+from fs import AttachmentResponse
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from fs import AttachmentResponse
 from googleapiclient.errors import HttpError
-from bs4 import BeautifulSoup
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def decode_mime_header(header: str) -> str:
     """Helper function to decode encoded email headers"""
@@ -199,7 +199,7 @@ class GmailService:
                             soup = BeautifulSoup(html_body.decode(errors='replace'), 'html.parser')
 
                             # Remove script and style elements
-                            for script in soup(["script", "style"]):
+                            for script in soup(['script', 'style']):
                                 script.extract()
 
                             # Handle links - preserve URL information by replacing with "[text](url)"
@@ -207,23 +207,27 @@ class GmailService:
                                 href = link.get('href')
                                 if href:
                                     link_text = link.get_text(strip=True) or href
-                                    link.replace_with(f"{link_text} {href}")
+                                    link.replace_with(f'{link_text} {href}')
 
                             # Extract text with better formatting
                             lines = []
-                            for element in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'li']):
+                            for element in soup.find_all(
+                                ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'li']
+                            ):
                                 text = element.get_text(strip=True)
                                 if text:
                                     if element.name.startswith('h'):
                                         level = int(element.name[1])
                                         if level == 1:
-                                            lines.append(f"\n{'=' * len(text)}\n{text}\n{'=' * len(text)}")
+                                            lines.append(
+                                                f'\n{"=" * len(text)}\n{text}\n{"=" * len(text)}'
+                                            )
                                         elif level == 2:
-                                            lines.append(f"\n{text}\n{'-' * len(text)}")
+                                            lines.append(f'\n{text}\n{"-" * len(text)}')
                                         else:
-                                            lines.append(f"\n{text}")
+                                            lines.append(f'\n{text}')
                                     elif element.name == 'li':
-                                        lines.append(f"• {text}")
+                                        lines.append(f'• {text}')
                                     else:
                                         lines.append(text)
 
@@ -308,9 +312,12 @@ class GmailService:
         If no attachments found or an error occurs, returns an empty list or error string.
         """
         try:
-            message = self.service.users().messages().get(
-                userId='me', id=email_id, format='full'
-            ).execute()
+            message = (
+                self.service.users()
+                .messages()
+                .get(userId='me', id=email_id, format='full')
+                .execute()
+            )
 
             payload = message.get('payload', {})
             attachments = []
@@ -318,7 +325,7 @@ class GmailService:
             return attachments
 
         except HttpError as error:
-            error_msg = f"An error occurred when fetching email attachments: {error}"
+            error_msg = f'An error occurred when fetching email attachments: {error}'
             logger.error(error_msg)
             return error_msg
 
@@ -349,6 +356,7 @@ class GmailService:
             subject = decode_mime_header(mime_message.get('subject', 'No Subject'))
             # Use standard library function to sanitize filename
             import re
+
             safe_subject = re.sub(r'[^\w\s-]', '_', subject)
             safe_subject = re.sub(r'\s+', '_', safe_subject)
 
@@ -362,12 +370,15 @@ class GmailService:
                         html_encoded = base64.b64encode(html_bytes).decode('utf-8')
 
                         # Create an AttachmentResponse instance
-                        return cast(AttachmentResponse,{
-                            "email": email_id,
-                            "filename" :f"Email_{safe_subject[:30]}_{email_id[:8]}",
-                            "mimeType":"text/html",
-                            "data":html_encoded
-                        })
+                        return cast(
+                            AttachmentResponse,
+                            {
+                                'email': email_id,
+                                'filename': f'Email_{safe_subject[:30]}_{email_id[:8]}',
+                                'mimeType': 'text/html',
+                                'data': html_encoded,
+                            },
+                        )
 
             # If no HTML, return plain text as string
             for part in mime_message.walk():
@@ -376,14 +387,16 @@ class GmailService:
                     if text_body and isinstance(text_body, bytes):
                         return text_body.decode(errors='replace')
 
-            return "No content found in email body"
+            return 'No content found in email body'
 
         except Exception as error:
-            error_msg = f"An error occurred extracting email body: {error}"
+            error_msg = f'An error occurred extracting email body: {error}'
             logger.error(error_msg)
             return error_msg
 
-    def _extract_attachments(self, payload: Dict[str, Any], email_id: str, attachments_list: List[Dict[str, Any]]):
+    def _extract_attachments(
+        self, payload: Dict[str, Any], email_id: str, attachments_list: List[Dict[str, Any]]
+    ):
         """
         Recursively traverses the parts of an email payload to find attachments.
 
@@ -405,11 +418,13 @@ class GmailService:
 
             # If the part has a filename and an attachmentId, it's likely an attachment
             if filename and attachment_id:
-                attachment_data = self.service.users().messages().attachments().get(
-                    userId='me',
-                    messageId=email_id,
-                    id=attachment_id
-                ).execute()
+                attachment_data = (
+                    self.service.users()
+                    .messages()
+                    .attachments()
+                    .get(userId='me', messageId=email_id, id=attachment_id)
+                    .execute()
+                )
 
                 data = attachment_data.get('data', '')
 
@@ -420,12 +435,14 @@ class GmailService:
 
                 file_data_encoded = base64.b64encode(file_data).decode('utf-8')
 
-                attachments_list.append({
-                    "email": email_id,
-                    'filename': filename,
-                    'mimeType': mime_type,
-                    'data': file_data_encoded
-                })
+                attachments_list.append(
+                    {
+                        'email': email_id,
+                        'filename': filename,
+                        'mimeType': mime_type,
+                        'data': file_data_encoded,
+                    }
+                )
 
             # If there are nested parts, recurse
             if 'parts' in part:
