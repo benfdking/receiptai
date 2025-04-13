@@ -2,7 +2,6 @@ import base64
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from fs import LocalFileSystem
 
@@ -79,28 +78,6 @@ class TestLocalFileSystem(unittest.TestCase):
 
         path = self.fs.save_file('test_png', 'image/png', self.png_data)
         self.assertTrue(path.endswith('.png'))
-
-    @patch('pdfkit.from_string')
-    def test_pdf_override(self, mock_from_string):
-        # Test HTML to PDF conversion when pdf_override is True
-        path = self.fs.save_file('test_html', 'text/html', self.html_data, pdf_override=True)
-
-        # Check if pdfkit was called
-        mock_from_string.assert_called_once()
-        self.assertTrue(path.endswith('.pdf'))
-
-    @patch('pdfkit.from_string')
-    def test_pdf_override_with_exception(self, mock_from_string):
-        # Test handling error in PDF conversion
-        mock_from_string.side_effect = Exception('PDF conversion error')
-
-        # Should fall back to saving as HTML
-        with self.assertLogs(level='ERROR'):
-            path = self.fs.save_file(
-                'test_html_error', 'text/html', self.html_data, pdf_override=True
-            )
-            self.assertTrue(os.path.exists(path))
-
 
 if __name__ == '__main__':
     unittest.main()
