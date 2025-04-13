@@ -1,15 +1,14 @@
-import json
 import asyncio
-import logging
-from datetime import timedelta, date
-from typing import Optional, Dict, List, Union, TypedDict, Any, Literal, cast
 import calendar
+import json
+import logging
+from datetime import date, timedelta
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union, cast
 
-from mcp.server.models import InitializationOptions
+import mcp.server.stdio
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
-import mcp.server.stdio
-
+from mcp.server.models import InitializationOptions
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Custom type definitions
 class DateRange(TypedDict):
     start: str  # ISO format date
-    end: str    # ISO format date
+    end: str  # ISO format date
 
 
 def get_today() -> str:
@@ -91,7 +90,7 @@ def get_specific_range(start_date_str: str, end_date_str: str) -> DateRange:
     return {'start': start_date.isoformat(), 'end': end_date.isoformat()}
 
 
-def get_relative_date(duration: int, unit: Literal["days", "weeks", "months"]) -> Union[str, None]:
+def get_relative_date(duration: int, unit: Literal['days', 'weeks', 'months']) -> Union[str, None]:
     """Returns a date relative to today based on duration and unit."""
     today = date.today()
     if unit == 'days':
@@ -109,7 +108,9 @@ def get_relative_date(duration: int, unit: Literal["days", "weeks", "months"]) -
     return None  # Should not happen if input is validated
 
 
-def get_past_relative_date(duration: int, unit: Literal["days", "weeks", "months"]) -> Union[str, None]:
+def get_past_relative_date(
+    duration: int, unit: Literal['days', 'weeks', 'months']
+) -> Union[str, None]:
     """Returns a date in the past relative to today based on duration and unit."""
     today = date.today()
     if unit == 'days':
@@ -124,7 +125,7 @@ def get_past_relative_date(duration: int, unit: Literal["days", "weeks", "months
             return date(year, month, today.day).isoformat()
         except ValueError:
             return date(year, month, calendar.monthrange(year, month)[1]).isoformat()
-    return None # Should not happen if input is validated
+    return None  # Should not happen if input is validated
 
 
 async def time_mcp() -> None:
@@ -146,26 +147,41 @@ async def time_mcp() -> None:
                     'properties': {
                         'date_type': {
                             'type': 'string',
-                            'enum': ['today', 'tomorrow', 'next_week', 'last_week', 'next_month', 'last_month', 'next_year', 'last_year', 'specific_range',
-                                     'in_days', 'in_weeks', 'in_months', 'last_days', 'last_weeks', 'last_months'],
-                            'description': 'The type of date or date range to retrieve.'
+                            'enum': [
+                                'today',
+                                'tomorrow',
+                                'next_week',
+                                'last_week',
+                                'next_month',
+                                'last_month',
+                                'next_year',
+                                'last_year',
+                                'specific_range',
+                                'in_days',
+                                'in_weeks',
+                                'in_months',
+                                'last_days',
+                                'last_weeks',
+                                'last_months',
+                            ],
+                            'description': 'The type of date or date range to retrieve.',
                         },
                         'start_date': {
                             'type': 'string',
                             'format': 'date',
-                            'description': 'Start date for a specific range (YYYY-MM-DD). Required when date_type is "specific_range".'
+                            'description': 'Start date for a specific range (YYYY-MM-DD). Required when date_type is "specific_range".',
                         },
                         'end_date': {
                             'type': 'string',
                             'format': 'date',
-                            'description': 'End date for a specific range (YYYY-MM-DD). Required when date_type is "specific_range".'
+                            'description': 'End date for a specific range (YYYY-MM-DD). Required when date_type is "specific_range".',
                         },
                         'duration': {
                             'type': 'integer',
-                            'description': 'Number of days, weeks, or months for relative dates. Required when date_type is "in_days", "in_weeks", "in_months", "last_days", "last_weeks", or "last_months".'
-                        }
+                            'description': 'Number of days, weeks, or months for relative dates. Required when date_type is "in_days", "in_weeks", "in_months", "last_days", "last_weeks", or "last_months".',
+                        },
                     },
-                    'required': ['date_type']
+                    'required': ['date_type'],
                 },
             ),
         ]
@@ -176,9 +192,19 @@ async def time_mcp() -> None:
     ) -> List[Union[types.TextContent, types.ImageContent, types.EmbeddedResource]]:
         if name == 'get_date':
             if not arguments or 'date_type' not in arguments:
-                return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": "Missing required argument: date_type"}, indent=2))]
+                return [
+                    types.TextContent(
+                        type='text',
+                        text=json.dumps(
+                            {'status': 'error', 'error': 'Missing required argument: date_type'},
+                            indent=2,
+                        ),
+                    )
+                ]
 
-            response_data: Dict[str, Union[str, DateRange, Dict[str, str], None]] = {"status": "success"}
+            response_data: Dict[str, Union[str, DateRange, Dict[str, str], None]] = {
+                'status': 'success'
+            }
             date_type = cast(str, arguments.get('date_type'))
 
             try:
@@ -201,24 +227,73 @@ async def time_mcp() -> None:
                         response_data['last_year'] = get_last_year()
                     case 'specific_range':
                         if 'start_date' not in arguments or 'end_date' not in arguments:
-                            return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": "Both start_date and end_date are required for specific_range"}, indent=2))]
+                            return [
+                                types.TextContent(
+                                    type='text',
+                                    text=json.dumps(
+                                        {
+                                            'status': 'error',
+                                            'error': 'Both start_date and end_date are required for specific_range',
+                                        },
+                                        indent=2,
+                                    ),
+                                )
+                            ]
                         start_date = cast(str, arguments['start_date'])
                         end_date = cast(str, arguments['end_date'])
                         response_data['specific_range'] = get_specific_range(start_date, end_date)
                     case 'in_days' | 'in_weeks' | 'in_months' as unit_type:
-                        if 'duration' not in arguments or not isinstance(arguments['duration'], int) or arguments['duration'] <= 0:
-                            return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": "A positive integer 'duration' is required for relative date types"}, indent=2))]
+                        if (
+                            'duration' not in arguments
+                            or not isinstance(arguments['duration'], int)
+                            or arguments['duration'] <= 0
+                        ):
+                            return [
+                                types.TextContent(
+                                    type='text',
+                                    text=json.dumps(
+                                        {
+                                            'status': 'error',
+                                            'error': "A positive integer 'duration' is required for relative date types",
+                                        },
+                                        indent=2,
+                                    ),
+                                )
+                            ]
                         duration = cast(int, arguments['duration'])
-                        unit = cast(Literal["days", "weeks", "months"], unit_type.split('_')[1])
+                        unit = cast(Literal['days', 'weeks', 'months'], unit_type.split('_')[1])
                         response_data['in_future'] = get_relative_date(duration, unit)
                     case 'last_days' | 'last_weeks' | 'last_months' as unit_type:
-                        if 'duration' not in arguments or not isinstance(arguments['duration'], int) or arguments['duration'] <= 0:
-                            return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": "A positive integer 'duration' is required for relative date types"}, indent=2))]
+                        if (
+                            'duration' not in arguments
+                            or not isinstance(arguments['duration'], int)
+                            or arguments['duration'] <= 0
+                        ):
+                            return [
+                                types.TextContent(
+                                    type='text',
+                                    text=json.dumps(
+                                        {
+                                            'status': 'error',
+                                            'error': "A positive integer 'duration' is required for relative date types",
+                                        },
+                                        indent=2,
+                                    ),
+                                )
+                            ]
                         duration = cast(int, arguments['duration'])
-                        unit = cast(Literal["days", "weeks", "months"], unit_type.split('_')[1])
+                        unit = cast(Literal['days', 'weeks', 'months'], unit_type.split('_')[1])
                         response_data['in_past'] = get_past_relative_date(duration, unit)
                     case _:
-                        return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": f"Invalid date_type: {date_type}"}, indent=2))]
+                        return [
+                            types.TextContent(
+                                type='text',
+                                text=json.dumps(
+                                    {'status': 'error', 'error': f'Invalid date_type: {date_type}'},
+                                    indent=2,
+                                ),
+                            )
+                        ]
 
                 return [
                     types.TextContent(
@@ -227,9 +302,18 @@ async def time_mcp() -> None:
                     )
                 ]
             except ValueError as e:
-                return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": str(e)}, indent=2))]
+                return [
+                    types.TextContent(
+                        type='text', text=json.dumps({'status': 'error', 'error': str(e)}, indent=2)
+                    )
+                ]
         else:
-            return [types.TextContent(type='text', text=json.dumps({"status": "error", "error": "invalid tool call"}, indent=2))]
+            return [
+                types.TextContent(
+                    type='text',
+                    text=json.dumps({'status': 'error', 'error': 'invalid tool call'}, indent=2),
+                )
+            ]
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(

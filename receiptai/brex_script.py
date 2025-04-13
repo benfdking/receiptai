@@ -1,31 +1,32 @@
 #! /usr/bin/env python3
 
+import asyncio
 import os
+
+from brex_api.expenses.expenses_api_client.api.expenses.list_expenses import asyncio_detailed
 from brex_api.expenses.expenses_api_client.client import AuthenticatedClient
-from brex_api.expenses.expenses_api_client.models.expense import Expense
-from brex_api.expenses.expenses_api_client.models.expense_type import ExpenseType
 from brex_script_pydantic_models import Model
 from dotenv import load_dotenv
-from brex_api.expenses.expenses_api_client.api.expenses.list_expenses import asyncio_detailed
-import asyncio
-import json
-
 from transaction import Transaction
 
 load_dotenv()
 
-brex_token = os.getenv("BREX_API_KEY")
+brex_token = os.getenv('BREX_API_KEY')
+
 
 async def main():
     client = AuthenticatedClient(
-        base_url="https://platform.brexapis.com",
+        base_url='https://platform.brexapis.com',
         token=brex_token,
     )
-    response = await asyncio_detailed(client=client, expand=[
-        "merchant",
-        "location",
-        "receipts",
-    ])
+    response = await asyncio_detailed(
+        client=client,
+        expand=[
+            'merchant',
+            'location',
+            'receipts',
+        ],
+    )
     # Read the response content as a string
     response = Model.model_validate_json(response.content)
 
@@ -43,8 +44,5 @@ async def main():
     print(transactions)
 
 
-
-    
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())

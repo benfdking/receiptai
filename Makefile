@@ -1,5 +1,7 @@
 .PHONY: dev inspect test lint format generate-api-client
 
+ci: lint test
+
 dev:
 	@python receiptai/server.py receiptai/gmail_mcp.py
 
@@ -14,6 +16,7 @@ lint:
 
 format:
 	ruff format .
+	ruff check --fix .
 
 install-dev:
 	uv venv
@@ -22,7 +25,6 @@ install-dev:
 
 brex-script:
 	./receiptai/brex_script.py
-
 
 generate-api-client:
 	openapi-python-client generate --path ./receiptai/brex_api/brex-expenses.json --output-path ./receiptai/brex_api/expenses --overwrite

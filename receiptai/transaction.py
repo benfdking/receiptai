@@ -1,6 +1,8 @@
 from datetime import datetime
 from pathlib import Path
+
 from pydantic import BaseModel
+
 
 class Transaction(BaseModel):
     id: str
@@ -9,7 +11,7 @@ class Transaction(BaseModel):
     date: datetime
     merchant: str
 
+
 class TransactionWithDocument(BaseModel):
     transaction: Transaction
     document: Path
-
