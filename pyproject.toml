@@ -62,7 +62,6 @@ dependencies = [
     "pydantic-settings==2.8.1",
     "pygments==2.19.1",
     "pyparsing==3.2.3",
-    "pytest==8.3.5",
     "pytest-asyncio==0.26.0",
     "python-dateutil==2.9.0.post0",
     "pyyaml==6.0.2",
@@ -89,6 +88,8 @@ dependencies = [
     "xxhash==3.5.0",
     "zstandard==0.23.0",
     "langchain-ollama>=0.3.1",
+    "ollama>=0.4.7",
+    "pytest>=8.3.5",
 ]
 
 [build-system]

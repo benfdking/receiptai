@@ -849,21 +849,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pytest"
-version = "8.3.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "iniconfig" },
-    { name = "packaging" },
-    { name = "pluggy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/3c/c9d525a414d506893f0cd8a8d0de7706446213181570cdbd766691164e40/pytest-8.3.5.tar.gz", hash = "sha256:f4efe70cc14e511565ac476b57c279e12a855b11f48f212af1080ef2263d3845", size = 1450891 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/3d/64ad57c803f1fa1e963a7946b6e0fea4a70df53c1a7fed304586539c2bac/pytest-8.3.5-py3-none-any.whl", hash = "sha256:c69214aa47deac29fad6c2a4f590b9c4a9fdb16a403176fe154b79c0b4d4d820", size = 343634 },
-]
-
-[[package]]
 name = "pytest-asyncio"
 version = "0.26.0"
 source = { registry = "https://pypi.org/simple" }
@@ -961,6 +946,7 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "mdurl" },
     { name = "oauthlib" },
+    { name = "ollama" },
     { name = "openapi-python-client" },
     { name = "orjson" },
     { name = "ormsgpack" },
@@ -1054,6 +1040,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = "==1.6.0" },
     { name = "mdurl", specifier = "==0.1.2" },
     { name = "oauthlib", specifier = "==3.2.2" },
+    { name = "ollama", specifier = ">=0.4.7" },
     { name = "openapi-python-client", specifier = "==0.24.3" },
     { name = "orjson", specifier = "==3.10.16" },
     { name = "ormsgpack", specifier = "==1.9.1" },
@@ -1068,7 +1055,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "==2.8.1" },
     { name = "pygments", specifier = "==2.19.1" },
     { name = "pyparsing", specifier = "==3.2.3" },
-    { name = "pytest", specifier = "==8.3.5" },
+    { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = "==0.26.0" },
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
     { name = "python-dotenv", specifier = "==1.1.0" },
