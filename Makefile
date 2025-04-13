@@ -3,7 +3,7 @@
 ci: lint test
 
 dev:
-	@python receiptai/server.py receiptai/gmail_mcp.py
+	@python receiptai/server.py receiptai/email/gmail/gmail_mcp.py
 
 inspect:
 	@mcp dev receiptai/gmail_mcp.py
