@@ -4,16 +4,8 @@ import os
 from abc import ABC, abstractmethod
 from typing import Dict, Union
 
-from pydantic import BaseModel
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-class AttachmentResponse(BaseModel):
-    filename: str
-    mimeType: str
-    data: Union[bytes, str]
 
 
 class FileSystem(ABC):

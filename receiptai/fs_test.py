@@ -79,5 +79,6 @@ class TestLocalFileSystem(unittest.TestCase):
         path = self.fs.save_file('test_png', 'image/png', self.png_data)
         self.assertTrue(path.endswith('.png'))
 
+
 if __name__ == '__main__':
     unittest.main()
