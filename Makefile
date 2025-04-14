@@ -3,10 +3,13 @@
 ci: lint test
 
 dev:
-	@python receiptai/server.py receiptai/email/gmail/gmail_mcp.py
+	@python receiptai/server.py receiptai/receipt_sources/email/gmail/gmail_mcp.py receiptai/receipt_sources/email/outlook/outlook_mcp.py
 
-inspect:
-	@mcp dev receiptai/gmail_mcp.py
+inspect-gmail:
+	@mcp dev receiptai/receipt_sources/email/gmail/gmail_mcp.py
+
+inspect-outlook:
+	@mcp dev receiptai/receipt_sources/email/outlook/outlook_mcp.py
 
 test:
 	@pytest -v

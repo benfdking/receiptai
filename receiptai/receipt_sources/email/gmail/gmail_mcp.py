@@ -9,9 +9,9 @@ import mcp.server.stdio
 import mcp.types as types
 from dotenv import load_dotenv
 from fs import LocalFileSystem
-from gmail_service import GmailService
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
+from receipt_sources.email.gmail.gmail_service import GmailService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
