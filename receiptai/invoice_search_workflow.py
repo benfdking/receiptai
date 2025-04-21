@@ -59,10 +59,10 @@ def _build_gmail_search_string(item: InvoiceInquiryItem) -> Union[str, SearchQue
 
     Example:
         >>> invoice = InvoiceInquiryItem(
-                timestamp="2025-04-11",
-                merchant_name="Zwilling",
-                id="UK-ON-000134028",
-                amount="72.90",
+                timestamp="1995-06-24",
+                merchant_name="some_merchant",
+                id="00000000",
+                amount="1000.00",
                 currency="GBP"
             )
         >>> build_gmail_search_string(invoice)
@@ -173,13 +173,6 @@ app = workflow.compile()
 # Initialize state and run the graph
 initial_state: InvoiceSearchState = {
     "search_items": [
-        {
-            "timestamp": "2025-04-11",
-            "merchant_name": "Zwilling",
-            "id": "UK-ON-000134028",
-            "amount": "72.90",
-            "currency": "GBP"
-        },
         {
             "timestamp": "2023-05-20",
             "merchant_name": "Widget Industries",
