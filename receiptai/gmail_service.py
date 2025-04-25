@@ -14,6 +14,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from email_types import EmailInterface
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +33,7 @@ def decode_mime_header(header: str) -> str:
     return decoded_string
 
 
-class GmailService:
+class GmailService(EmailInterface):
     def __init__(
         self,
         creds_file_path: str,

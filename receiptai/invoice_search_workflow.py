@@ -2,7 +2,7 @@ import os
 import logging
 
 from langgraph.graph import StateGraph
-from typing import TypedDict, Literal, Union, List, Dict
+from typing import Any, TypedDict, Literal, Union, List
 from gmail_service import GmailService
 from dotenv import load_dotenv
 
@@ -39,7 +39,7 @@ class SearchQueryItem(TypedDict):
 
 class QueryResultItem(TypedDict):
     id: str
-    result: Union[str, List[Dict[str, str]]]
+    result: List[Any]
 
 class InvoiceSearchState(TypedDict, total=False):
     search_items: list[InvoiceInquiryItem]
@@ -106,18 +106,17 @@ async def process_queries(state: InvoiceSearchState) -> InvoiceSearchState:
         new_state["query_results"] = None
         return new_state
 
-    query_results = [await _process_query(query) for query in queries if queries and  query is not None]
+    query_results = [await _process_query(query, gmail_service) for query in queries if queries and  query is not None]
     results = [item for item in query_results if not isinstance(item, str)]
 
     new_state["query_results"] = results
 
     return new_state
 
-async def _process_query(query: SearchQueryItem) -> Union[str, QueryResultItem]:
+async def _process_query(query: SearchQueryItem, email_service: Any) -> QueryResultItem:
     # Simulate processing the query and return a result
-    result = await gmail_service.search_emails(query['query'])
-    if isinstance(result, str):
-        return result
+    result = await email_service.search_emails(query['query'])
+
 
     return QueryResultItem(id=query["id"], result=result)
 
