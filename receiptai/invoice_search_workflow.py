@@ -1,8 +1,9 @@
 import os
 import logging
 
+from email_types import Email
 from langgraph.graph import StateGraph
-from typing import TypedDict, Literal, Union, List, Dict
+from typing import Any, TypedDict, Literal, Union, List
 from gmail_service import GmailService
 from dotenv import load_dotenv
 
@@ -39,15 +40,15 @@ class SearchQueryItem(TypedDict):
 
 class QueryResultItem(TypedDict):
     id: str
-    result: Union[str, List[Dict[str, str]]]
+    result: List[Email]
 
 class InvoiceSearchState(TypedDict, total=False):
-    search_items: list[InvoiceInquiryItem]
-    defined_queries: Union[None, list[SearchQueryItem]]
+    search_items: InvoiceInquiryItem
+    defined_query: Union[None, SearchQueryItem]
     query_results: Union[None, list[QueryResultItem]]
 
 
-def _build_gmail_search_string(item: InvoiceInquiryItem) -> Union[str, SearchQueryItem]:
+def _build_gmail_search_string(item: InvoiceInquiryItem) -> Union[None, SearchQueryItem]:
     """
     Builds a Gmail search string to find emails containing specific invoice details.
 
@@ -69,7 +70,7 @@ def _build_gmail_search_string(item: InvoiceInquiryItem) -> Union[str, SearchQue
     """
 
     if all(param is None or "" for param in [item["timestamp"], item["merchant_name"], item["id"], item["amount"], item["currency"]]):
-        return ""
+        return None
 
     search_terms = []
 
@@ -86,39 +87,34 @@ def _build_gmail_search_string(item: InvoiceInquiryItem) -> Union[str, SearchQue
     return SearchQueryItem(id=item["id"], query=search_string)
 
 
-def build_search_queries(state: InvoiceSearchState) -> InvoiceSearchState:
+def build_search_query(state: InvoiceSearchState) -> InvoiceSearchState:
     new_state = state.copy()
-    items = new_state.get("search_items", [])
+    item = new_state.get("search_items", None)
+    if not item:
+        new_state["defined_query"] = None
+        return new_state
 
-    search_query_items = [_build_gmail_search_string(item) for item in items]
-    queries = [item for item in search_query_items if not isinstance(item, str)]
-
-    new_state["defined_queries"] = queries if queries else None
-
+    query = _build_gmail_search_string(item)
+    new_state["defined_query"] = query if query else None
     return new_state
 
-async def process_queries(state: InvoiceSearchState) -> InvoiceSearchState:
+async def process_query(state: InvoiceSearchState) -> InvoiceSearchState:
     new_state = state.copy()
-    queries = new_state.get("defined_queries", [])
+    query = new_state.get("defined_query", None)
 
-
-    if not queries:
+    if not query:
         new_state["query_results"] = None
         return new_state
 
-    query_results = [await _process_query(query) for query in queries if queries and  query is not None]
-    results = [item for item in query_results if not isinstance(item, str)]
+    query_result = await _process_query(query, gmail_service)
 
-    new_state["query_results"] = results
+    new_state["query_results"] = [query_result] if query_result else None
 
     return new_state
 
-async def _process_query(query: SearchQueryItem) -> Union[str, QueryResultItem]:
+async def _process_query(query: SearchQueryItem, email_service: Any) -> QueryResultItem:
     # Simulate processing the query and return a result
-    result = await gmail_service.search_emails(query['query'])
-    if isinstance(result, str):
-        return result
-
+    result = await email_service.search_emails(query['query'])
     return QueryResultItem(id=query["id"], result=result)
 
 
@@ -129,11 +125,11 @@ def display_result(state: InvoiceSearchState) -> InvoiceSearchState:
     return new_state
 
 # Define the routing logic for conditional paths
-def router(state: InvoiceSearchState) -> Literal["process_queries", "short_circuit"]:
+def router(state: InvoiceSearchState) -> Literal["process_query", "short_circuit"]:
     """Decide the next node based on user input"""
-    defined_queries = state.get("defined_queries", None)
-    if defined_queries:
-        return "process_queries"
+    defined_query = state.get("defined_query", None)
+    if defined_query:
+        return "process_query"
     else:
         print("No queries defined")
         return "short_circuit"
@@ -142,27 +138,27 @@ def router(state: InvoiceSearchState) -> Literal["process_queries", "short_circu
 workflow = StateGraph(state_schema=InvoiceSearchState)
 
 # Add nodes to the graph
-workflow.add_node("build_search_queries", build_search_queries)
-workflow.add_node("process_queries", process_queries)
+workflow.add_node("build_search_query", build_search_query)
+workflow.add_node("process_query", process_query)
 workflow.add_node("display_result", display_result)
 #
 
 # Connect nodes with edges
-# workflow.add_edge("build_search_queries", "process_queries")
+# workflow.add_edge("build_search_query", "process_query")
 
 # Set the entry point of the graph
-workflow.set_entry_point("build_search_queries")
+workflow.set_entry_point("build_search_query")
 
 workflow.add_conditional_edges(
-    "build_search_queries",
+    "build_search_query",
     router,
     {
-        "process_queries": "process_queries",
+        "process_query": "process_query",
         "short_circuit": "display_result"
     }
 )
 
-workflow.add_edge("process_queries", "display_result")
+workflow.add_edge("process_query", "display_result")
 
 
 
@@ -172,22 +168,14 @@ app = workflow.compile()
 
 # Initialize state and run the graph
 initial_state: InvoiceSearchState = {
-    "search_items": [
+    "search_items":
         {
             "timestamp": "2023-05-20",
             "merchant_name": "Widget Industries",
             "id": "WI-9982-B",
             "amount": "499.50",
             "currency": "EUR"
-        },
-        {
-            "timestamp": "2023-06-07",
-            "merchant_name": "TechGadgets Inc",
-            "id": "TG-2023-1187",
-            "amount": "899.95",
-            "currency": "USD"
         }
-    ]
 }
 
 import asyncio
