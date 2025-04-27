@@ -170,10 +170,10 @@ app = workflow.compile()
 initial_state: InvoiceSearchState = {
     "search_items":
         {
-            "timestamp": "2023-05-20",
-            "merchant_name": "Widget Industries",
-            "id": "WI-9982-B",
-            "amount": "499.50",
+            "timestamp": "2025-04-25",
+            "merchant_name": "CASA",
+            "id": "ORD-1745343236226",
+            "amount": "66.00",
             "currency": "EUR"
         }
 }
