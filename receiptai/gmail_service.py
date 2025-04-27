@@ -6,6 +6,7 @@ from base64 import urlsafe_b64decode
 from email import message_from_bytes
 from email.header import decode_header
 from typing import Any, Dict, List, Union, cast
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 from fs import AttachmentResponse
@@ -14,7 +15,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from email_types import EmailInterface
+from email_types import EmailInterface, Attachment
+from email_types import Email
+from email.utils import parsedate_to_datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -181,6 +184,18 @@ class GmailService(EmailInterface):
             decoded_data = urlsafe_b64decode(raw_data)
 
             mime_message = message_from_bytes(decoded_data)
+            date_str = mime_message.get('date')
+            if date_str:
+                try:
+                    # Parse the email date string into a datetime object
+                    email_date = parsedate_to_datetime(date_str)
+                    email_metadata['date'] = email_date
+                except Exception as e:
+                    logger.error(f"Error parsing email date '{date_str}': {str(e)}")
+                    email_metadata['date'] = None  # Set to None instead of defaulting to now
+            else:
+                logger.warning(f"No date found in email {email_id}")
+                email_metadata['date'] = None
 
             body_content = None
 
@@ -247,6 +262,7 @@ class GmailService(EmailInterface):
                 mime_message.get('subject', 'No Subject')
             )
             email_metadata['sender'] = mime_message.get('from', 'Unknown Sender')
+            email_metadata['to'] = mime_message.get('to', 'Unknown Recipient')
 
             logger.info(f'Retrieved details for email: {email_id}')
 
@@ -256,16 +272,15 @@ class GmailService(EmailInterface):
             logger.error(error_msg)
             return error_msg
 
-    async def search_emails(self, query: str) -> Union[List[Dict[str, str]], str]:
+    async def search_emails(self, query: str) -> List[Email]:
         """
-        Searches emails using Gmail's search syntax.
-        ref -> https://developers.google.com/workspace/gmail/api/guides/filtering
-
-        Returns list of email objects with id, subject, sender, and body.
+        Searches emails based on a query string.
 
         Args:
-            query (str): Gmail search query (e.g., 'from:example@gmail.com', 'subject:hello',
-                            'after:2023/04/14 before:2023/04/16 (subject:"Amazon" OR "Amazon") £42.99'
+            query: The search query string
+
+        Returns:
+            A list of email objects that match the search criteria
         """
         try:
             user_id = 'me'
@@ -290,27 +305,38 @@ class GmailService(EmailInterface):
 
             logger.info(f'Found {len(messages)} emails matching query: {query}')
 
-            detailed_messages = []
+            email_list = []
             for msg in messages:
                 email_details = await self.get_email_details(msg['id'])
                 if isinstance(email_details, dict):
-                    detailed_messages.append(email_details)
-
-            return detailed_messages
+                    # Convert dictionary to Email object
+                    try:
+                        email = Email(
+                            id=email_details.get('id', ''),
+                            subject=email_details.get('subject', ''),
+                            body=email_details.get('body', ''),
+                            from_email=email_details.get('sender', ''),
+                            to_email=email_details.get('to', ''),
+                            date= cast(datetime, email_details.get('date', '')),
+                        )
+                        email_list.append(email)
+                    except Exception as e:
+                        logger.error(f"Error creating Email object: {str(e)}")
+            return email_list
 
         except HttpError as error:
-            error_msg = f'An HttpError occurred: {str(error)}'
-            logger.error(error_msg)
-            return error_msg
+            logger.error(f'An HttpError occurred: {str(error)}')
+            return []
 
-    async def get_email_attachments(self, email_id: str) -> Union[List[AttachmentResponse], str]:
+    async def get_email_attachments(self, email_id: str) -> List[Attachment]:
         """
-        Retrieve all attachments from a specific email by its ID.
-        Returns a list of dictionaries, each containing:
-            - filename
-            - mimeType
-            - data (raw byte content or base64-encoded string)
-        If no attachments found or an error occurs, returns an empty list or error string.
+        Retrieves attachment(s) for a specific email.
+
+        Args:
+            email_id: The unique identifier for the email
+
+        Returns:
+            The attachment data for the specified email
         """
         try:
             message = (
@@ -321,14 +347,28 @@ class GmailService(EmailInterface):
             )
 
             payload = message.get('payload', {})
+            attachments_data = []
+            self._extract_attachments(payload, email_id, attachments_data)
+
+            # Convert to Attachment objects
             attachments = []
-            self._extract_attachments(payload, email_id, attachments)
+            for attachment_data in attachments_data:
+                # Decode from base64 to get raw bytes
+                content_bytes = base64.b64decode(attachment_data['data'])
+
+                attachment = Attachment(
+                    filename=attachment_data['filename'],
+                    content_type=attachment_data['mimeType'],
+                    content=content_bytes
+                )
+                attachments.append(attachment)
+
             return attachments
 
         except HttpError as error:
             error_msg = f'An error occurred when fetching email attachments: {error}'
             logger.error(error_msg)
-            return error_msg
+            return []
 
     async def get_email_body_as_attachment(self, email_id: str) -> Union[AttachmentResponse, str]:
         """
