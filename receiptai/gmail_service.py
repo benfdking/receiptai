@@ -8,7 +8,8 @@ from email.header import decode_header
 from typing import Any, Dict, List, Union, cast
 from datetime import datetime
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
 from fs import AttachmentResponse
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -219,17 +220,20 @@ class GmailService(EmailInterface):
                                 script.extract()
 
                             # Handle links - preserve URL information by replacing with "[text](url)"
-                            for link in soup.find_all('a'):
+                            for link_element in soup.find_all('a'):
+                                link = cast(Tag, link_element)
                                 href = link.get('href')
                                 if href:
                                     link_text = link.get_text(strip=True) or href
-                                    link.replace_with(f'{link_text} {href}')
+                                    replacement_string = f'{link_text} {href}'
+                                    link.replace_with(NavigableString(replacement_string))
 
                             # Extract text with better formatting
                             lines = []
-                            for element in soup.find_all(
+                            for element_raw in soup.find_all(
                                 ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'li']
                             ):
+                                element = cast(Tag, element_raw)
                                 text = element.get_text(strip=True)
                                 if text:
                                     if element.name.startswith('h'):
