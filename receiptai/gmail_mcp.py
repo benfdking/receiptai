@@ -157,6 +157,7 @@ async def gmail_mcp():
             if isinstance(search_results, list):
                 formatted_emails = []
                 for email in search_results:
+                    email = cast(dict, email)
                     body = email.get('body', '')
 
                     formatted_email = {
@@ -338,7 +339,7 @@ async def gmail_mcp():
                     safe_filename = f'{base}_{timestamp}{ext}'
 
                 # Save file
-                saved_path = file_system.save_file(safe_filename, mime_type, content, True)
+                saved_path = file_system.save_file(safe_filename, mime_type, content)
 
                 return [
                     types.TextContent(
